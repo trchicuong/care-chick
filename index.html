@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/favicons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicons/favicon-16x16.png">
+
+    <title>Nuôi Gà Tiên (Phiên bản Beta)</title>
+    <link rel="stylesheet" href="/src/style.css">
+
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ffffff">
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@5/dark.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+        integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+
+<body>
+
+    <div id="preloader">
+        <div class="spinner"></div>
+        <span class="loading-text">Đang tải game...</span>
+    </div>
+
+    <div id="splash-screen">
+        <img src="/images/favicons/android-chrome-512x512.png" alt="Game Logo" class="game-logo">
+        <button id="start-game-button">Vào game</button>
+        <p class="version-text">v2.0-beta</p>
+    </div>
+
+    <div id="game-wrapper" class="hidden">
+        <header id="top-bar">
+            <button id="info-button">!</button>
+            <button id="mute-button">
+                <i id="mute-icon-fa" class="fa-solid fa-volume-high"></i>
+            </button>
+            <div id="currency-display">
+                <span id="coin-count">100</span>
+                <img src="/images/icons/coin-icon.png" alt="Coin" class="coin-icon">
+            </div>
+        </header>
+
+        <div id="wrapper">
+            <div id="game-container">
+                <div id="pet-background"></div>
+
+                <h1>Nuôi Gà Tiên</h1>
+
+                <div id="pet-display">
+                    <img id="pet-image" src="/images/egg.png" alt="Thú cưng">
+                    <img id="pet-hat" class="pet-accessory" src="" alt="Mũ">
+                </div>
+
+                <div id="pet-stats">
+                    <div class="stat">
+                        <p>No bụng</p>
+                        <div class="stat-bar-container">
+                            <div id="hunger-bar" class="stat-bar"></div>
+                        </div>
+                    </div>
+                    <div class="stat">
+                        <p>Vui vẻ</p>
+                        <div class="stat-bar-container">
+                            <div id="happiness-bar" class="stat-bar"></div>
+                        </div>
+                    </div>
+                    <div class="stat">
+                        <p>Sạch sẽ</p>
+                        <div class="stat-bar-container">
+                            <div id="cleanliness-bar" class="stat-bar"></div>
+                        </div>
+                    </div>
+                    <div class="stat">
+                        <p>Năng lượng</p>
+                        <div class="stat-bar-container">
+                            <div id="energy-bar" class="stat-bar"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="actions">
+                    <button id="feed-button" title="Cho Ăn"><img src="/images/eating.png" alt="Cho Ăn"></button>
+                    <button id="play-button" title="Chơi Đùa"><img src="/images/playing.png" alt="Chơi Đùa"></button>
+                    <button id="clean-button" title="Tắm Rửa"><img src="/images/clean.png" alt="Tắm Rửa"></button>
+                    <button id="sleep-button" title="Ngủ/Thức"><img src="/images/moon.png" alt="Ngủ"></button>
+                    <button id="cure-button" title="Chữa Bệnh">💊</button>
+                </div>
+
+                <div id="main-info">
+                    <p>Tuổi: <span id="age-display">0</span></p>
+                    <p>Cấp: <span id="level-display">Trứng</span></p>
+                    <p id="status-text"></p>
+                </div>
+
+                <div id="bottom-buttons">
+                    <button id="open-shop-button">Cửa Hàng</button>
+                    <button id="open-inventory-button">Túi Đồ</button>
+                    <button id="explore-button">Thám Hiểm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="explore-modal" class="hidden">
+        <div id="explore-content">
+            <h2>Chọn Địa Điểm</h2>
+            <ul id="explore-location-list" class="item-list">
+            </ul>
+            <button id="close-explore-button">Đóng</button>
+        </div>
+    </div>
+
+    <div id="shop-modal" class="hidden">
+        <div id="shop-content">
+            <div class="shop-tabs">
+                <button class="tab-button active" data-tab="food-tab">Thức Ăn</button>
+                <button class="tab-button" data-tab="decor-tab">Trang Trí</button>
+                <button class="tab-button" data-tab="tool-tab">Công Cụ</button>
+            </div>
+
+            <div id="food-tab" class="tab-content active">
+                <ul id="shop-food-list" class="item-list"></ul>
+            </div>
+            <div id="decor-tab" class="tab-content">
+                <ul id="shop-decor-list" class="item-list"></ul>
+            </div>
+            <div id="tool-tab" class="tab-content">
+                <ul id="shop-tool-list" class="item-list"></ul>
+            </div>
+
+            <button id="close-shop-button">Đóng</button>
+        </div>
+    </div>
+
+    <div id="inventory-modal" class="hidden">
+        <div id="inventory-content">
+            <h2>Túi Đồ</h2>
+            <div class="shop-tabs">
+                <button class="tab-button active" data-tab="hat-inv-tab">Mũ</button>
+                <button class="tab-button" data-tab="bg-inv-tab">Nền</button>
+                <button class="tab-button" data-tab="material-inv-tab">Vật Liệu</button>
+                <button class="tab-button" data-tab="craft-inv-tab">Ghép</button>
+            </div>
+
+            <div id="hat-inv-tab" class="tab-content active">
+                <ul id="inventory-hat-list" class="item-list"></ul>
+            </div>
+            <div id="bg-inv-tab" class="tab-content">
+                <ul id="inventory-bg-list" class="item-list"></ul>
+            </div>
+            <div id="material-inv-tab" class="tab-content">
+                <ul id="inventory-material-list" class="item-list"></ul>
+            </div>
+            <div id="craft-inv-tab" class="tab-content">
+                <ul id="crafting-recipe-list" class="item-list"></ul>
+            </div>
+
+            <button id="close-inventory-button">Đóng</button>
+        </div>
+    </div>
+
+    <audio id="bg-music" muted loop src="/audio/music.mp3"></audio>
+
+    <script type="module" src="/src/script.js"></script>
+</body>
+
+</html>

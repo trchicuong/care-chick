@@ -1,0 +1,22 @@
+{
+    "name": "Nuôi Gà Tiên (Phiên bản Beta)",
+    "short_name": "Gà Tiên",
+    "description": "Game nuôi gà ảo trên nền tảng web.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#ffffff",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/images/favicons/android-chrome-192x192.png",
+            "type": "image/png",
+            "sizes": "192x192"
+        },
+        {
+            "src": "/images/favicons/android-chrome-512x512.png",
+            "type": "image/png",
+            "sizes": "512x512"
+        }
+    ]
+}
