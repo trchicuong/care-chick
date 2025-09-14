@@ -218,13 +218,13 @@ const SHOP_ITEMS = {
     'ngo_thuong': { name: 'Ngô Thường', type: 'food', price: 20, hunger: -30, happiness: 5, description: 'Món ăn cơ bản, phục hồi 30 No bụng và tăng 5 Vui vẻ.', satietyDuration: 0 },
     'sau_map': { name: 'Sâu Mập', type: 'food', price: 50, hunger: -50, happiness: 15, description: 'Món khoái khẩu! Phục hồi 50 No bụng, tăng 15 Vui vẻ và giúp no lâu hơn.', satietyDuration: 60 },
     'vitamin': { name: 'Vitamin Tổng Hợp', type: 'food', price: 150, hunger: -15, happiness: 40, description: 'Bổ sung Vitamin tăng Vui vẻ (+40) và giảm nhẹ cơn đói (-15).', satietyDuration: 120 },
-    'ga_ran': { name: 'Gà Rán Giòn Tan', type: 'food', price: 350, hunger: -80, happiness: 25, description: 'Một bữa ăn thịnh soạn. Phục hồi đến 80 No bụng, tăng 25 Vui vẻ và no lâu.', satietyDuration: 300 },
     'trai_cay_vang': { name: 'Trái Cây Vàng', type: 'food', price: 300, hunger: -40, happiness: 60, description: 'Loại quả thần kỳ mang lại niềm Vui vẻ tột độ (+60) và phục hồi 40 No bụng.', satietyDuration: 15 },
+    'ga_ran': { name: 'Gà Rán Giòn Tan', type: 'food', price: 350, hunger: -80, happiness: 25, description: 'Một bữa ăn thịnh soạn. Phục hồi đến 80 No bụng, tăng 25 Vui vẻ và no lâu.', satietyDuration: 300 },
     'thach_nang_luong_sieu_cap': { name: 'Thạch Năng Lượng Siêu Cấp', type: 'food', price: 750, description: 'Phục hồi 75% Năng lượng đã mất ngay lập tức.', satietyDuration: 10, energyPercent: 0.75 },
-    'tinh_chat_hoi_phuc': { name: 'Tinh Chất Hồi Phục', type: 'food', price: 950, description: 'Phục hồi 50% các thanh chỉ số No bụng, Vui vẻ và Sạch sẽ đã mất.', satietyDuration: 10, restorePercent: 0.5 },
-    'sieu_pham_ga_tien': { name: 'Siêu Phẩm Gà Tiên', type: 'food', price: 2500, description: 'Tinh hoa ẩm thực, phục hồi 80 điểm cho tất cả chỉ số.', satietyDuration: 1200, multiRestore: { hunger: -80, happiness: 80, cleanliness: 80, energy: 80 } },
     'keo_gung_may_man': { name: 'Kẹo Gừng May Mắn', type: 'food', price: 900, hunger: -5, happiness: 10, description: 'Một chút ngọt ngào. Tăng 50% Xu nhận được trong 1 giờ tới.', buff: { type: 'coinBoost', multiplier: 1.5, duration: 3600000 } },
+    'tinh_chat_hoi_phuc': { name: 'Tinh Chất Hồi Phục', type: 'food', price: 950, description: 'Phục hồi 50% các thanh chỉ số No bụng, Vui vẻ và Sạch sẽ đã mất.', satietyDuration: 10, restorePercent: 0.5 },
     'nuoc_suoi_tinh_lang': { name: 'Nước Suối Tĩnh Lặng', type: 'food', price: 1800, hunger: 0, happiness: 5, description: 'Thanh lọc cơ thể. Giảm 30% tốc độ suy giảm chỉ số trong 2 giờ.', buff: { type: 'decayReducer', multiplier: 0.7, duration: 7200000 } },
+    'sieu_pham_ga_tien': { name: 'Siêu Phẩm Gà Tiên', type: 'food', price: 2500, description: 'Tinh hoa ẩm thực, phục hồi 80 điểm cho tất cả chỉ số.', satietyDuration: 1200, multiRestore: { hunger: -80, happiness: 80, cleanliness: 80, energy: 80 } },
     'chen_an_vui_ve': { name: 'Chén Ăn Vui Vẻ', type: 'tool', slot: 'feed', price: 600, description: 'Nâng cấp "Cho Ăn": Tăng thêm No bụng và Vui vẻ.' },
     'bo_chen_dua_tinh_xao': { name: 'Bộ Chén Đũa Tinh Xảo', type: 'tool', slot: 'feed', price: 1500, description: 'Nâng cấp "Cho Ăn": Giúp ăn ngon miệng hơn, hồi nhiều No bụng và Vui vẻ hơn.' },
     'bi_kip_nau_nuong': { name: 'Bí Kíp Nấu Nướng Thượng Hạng', type: 'tool', slot: 'feed', price: 3200, description: 'Nâng cấp "Cho Ăn": Biến thức ăn đơn giản trở nên siêu ngon và 25% cơ hội tạo ra "Món Phụ Bất Ngờ" nhận thêm Xu.' },
@@ -481,24 +481,34 @@ function calculateOfflineProgression() {
 
     const now = Date.now();
     const offlineTime = now - pet.lastUpdateTime;
+    const ticksMissed = Math.floor(offlineTime / gameTickInterval);
+
+    if (ticksMissed <= 0) {
+        return;
+    }
 
     if (pet.isSleeping) {
-        const energyNeeded = CONSTANTS.MAX_STAT - pet.energy;
-        const ticksToWakeUp = Math.ceil(energyNeeded / 0.63);
-        const timeToWakeUpMs = ticksToWakeUp * gameTickInterval;
+        const currentLv = Math.max(1, getCurrentLevel());
+        const energyPerTick = Math.max(0.2, 1.0 - ((currentLv - 1) * 0.048));
 
-        if (offlineTime > timeToWakeUpMs) {
+        const energyNeeded = CONSTANTS.MAX_STAT - pet.energy;
+        const ticksToFullEnergy = Math.ceil(energyNeeded / energyPerTick);
+
+        if (ticksMissed <= ticksToFullEnergy) {
+            pet.energy += ticksMissed * energyPerTick;
+        }
+        else {
             pet.energy = CONSTANTS.MAX_STAT;
             pet.isSleeping = false;
-        } else {
-            const ticksPassed = Math.floor(offlineTime / gameTickInterval);
-            pet.energy = Math.min(CONSTANTS.MAX_STAT, pet.energy + ticksPassed * 0.63);
         }
     }
 
-    const threeDays = 72 * 60 * 60 * 1000;
+    if (pet.isExploring && now >= pet.explorationData.endTime) {
+        finishExploration(true);
+    }
 
-    if (offlineTime > threeDays) {
+    const threeDays = 72 * 60 * 60 * 1000;
+    if (offlineTime > threeDays && pet.stage !== CONSTANTS.STAGE_EGG) {
         applyAbandonmentPenalty();
     }
 }
@@ -1117,7 +1127,10 @@ function gameLoop(currentTime) {
         }
 
         if (pet.isSleeping) {
-            pet.energy = Math.min(CONSTANTS.MAX_STAT, pet.energy + 0.63);
+            const currentLv = Math.max(1, getCurrentLevel());
+            const energyPerTick = Math.max(0.2, 1.0 - ((currentLv - 1) * 0.048));
+            pet.energy = Math.min(CONSTANTS.MAX_STAT, pet.energy + energyPerTick);
+
             if (pet.energy >= CONSTANTS.MAX_STAT) {
                 pet.isSleeping = false;
                 playSfxFromBuffer('wake');
