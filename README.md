@@ -58,8 +58,12 @@ care-chick/
 │   ├── images/
 │   └── manifest.json
 ├── src/
-│   ├── script.js
-│   └── style.css
+│   ├── css/
+│   │   └── style.css
+│   └── js/
+│       ├── audio.js
+│       ├── data.js
+│       └── ...
 ├── .gitignore
 ├── index.html
 ├── LICENSE
