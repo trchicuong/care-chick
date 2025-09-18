@@ -106,12 +106,17 @@ function updatePetVisuals(pet, isAnimating) {
 }
 
 function updateUIState(pet) {
-    const isBusy = pet.isExploring || pet.isSick || pet.isSleeping;
-    [feedButton, playButton, cleanButton, sleepButton].forEach(btn => btn.disabled = isBusy);
+    const disableActions = pet.isExploring || pet.isSick || pet.isSleeping;
+    [feedButton, playButton, cleanButton].forEach(btn => btn.disabled = disableActions);
+
+    const disableSleep = pet.isExploring || pet.isSick;
+    sleepButton.disabled = disableSleep;
 
     cureButton.style.display = pet.isSick ? 'inline-block' : 'none';
     [feedButton, playButton, cleanButton, sleepButton].forEach(btn => btn.style.display = pet.isSick ? 'none' : 'inline-block');
-    if (pet.stage === CONSTANTS.STAGE_EGG) sleepButton.style.display = 'none';
+    if (pet.stage === CONSTANTS.STAGE_EGG) {
+        sleepButton.style.display = 'none';
+    }
 
     statusText.textContent = '';
     if (pet.isExploring) {
@@ -119,8 +124,11 @@ function updateUIState(pet) {
         const minutes = Math.floor(timeLeft / 60000);
         const seconds = Math.floor((timeLeft % 60000) / 1000);
         statusText.textContent = `Thám hiểm... ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-    } else if (pet.isSick) statusText.textContent = 'Bị ốm rồi!';
-    else if (pet.isSleeping) statusText.textContent = 'Đang ngủ...Zzz';
+    } else if (pet.isSick) {
+        statusText.textContent = 'Bị ốm rồi!';
+    } else if (pet.isSleeping) {
+        statusText.textContent = 'Đang ngủ...Zzz';
+    }
 }
 
 export function updateDisplay(pet, isAnimating, sadAudioSourceNode, playSfxFromBuffer) {
@@ -129,7 +137,7 @@ export function updateDisplay(pet, isAnimating, sadAudioSourceNode, playSfxFromB
     updatePetVisuals(pet, isAnimating);
     updateUIState(pet);
 
-    const isSad = !isAnimating && !pet.isExploring && !pet.isSick && !pet.isSleeping && (pet.hunger > 80 || pet.happiness < 20 || pet.cleanliness < 20 || pet.energy < 10);
+    const isSad = !isAnimating && !pet.isExploring && !pet.isSick && !pet.isSleeping && pet.stage !== CONSTANTS.STAGE_EGG && (pet.hunger > 80 || pet.happiness < 20 || pet.cleanliness < 20 || pet.energy < 10);
     if (isSad && !sadAudioSourceNode) return playSfxFromBuffer('sad', true);
     if (!isSad && sadAudioSourceNode) {
         sadAudioSourceNode.stop(0);
