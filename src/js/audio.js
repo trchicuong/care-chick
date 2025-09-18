@@ -1,6 +1,7 @@
 import { BG_MUSIC_NORMAL_VOLUME, BG_MUSIC_DUCKED_VOLUME } from './data.js';
 import { muteIcon, bgMusic as bgMusicElement } from './ui.js';
 
+export let isMuted = false;
 let duckingTimeout = null;
 let audioContext;
 let bgMusicSource;
@@ -16,7 +17,8 @@ async function loadSoundToBuffer(url) {
     try {
         const response = await fetch(url);
         const arrayBuffer = await response.arrayBuffer();
-        return await audioContext.decodeAudioData(arrayBuffer);
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        return audioBuffer;
     } catch (error) {
         console.error(`Lỗi tải file âm thanh ${url}:`, error);
         return null;
@@ -26,7 +28,9 @@ async function loadSoundToBuffer(url) {
 export function playSfxFromBuffer(key, loop = false) {
     if (sfxBuffers[key] && audioContext) {
         clearTimeout(duckingTimeout);
-        bgMusicGainNode.gain.linearRampToValueAtTime(BG_MUSIC_DUCKED_VOLUME, audioContext.currentTime + 0.5);
+        if (bgMusicGainNode) {
+            bgMusicGainNode.gain.linearRampToValueAtTime(BG_MUSIC_DUCKED_VOLUME, audioContext.currentTime + 0.5);
+        }
 
         const sourceNode = audioContext.createBufferSource();
         sourceNode.buffer = sfxBuffers[key];
@@ -36,7 +40,9 @@ export function playSfxFromBuffer(key, loop = false) {
 
         if (!loop) {
             duckingTimeout = setTimeout(() => {
-                bgMusicGainNode.gain.linearRampToValueAtTime(BG_MUSIC_NORMAL_VOLUME, audioContext.currentTime + 0.5);
+                if (bgMusicGainNode) {
+                    bgMusicGainNode.gain.linearRampToValueAtTime(BG_MUSIC_NORMAL_VOLUME, audioContext.currentTime + 0.5);
+                }
             }, 2000);
         }
         return sourceNode;
@@ -71,7 +77,7 @@ export async function setupBgMusicWithWebAudio() {
     bgMusicSource.connect(bgMusicGainNode).connect(masterGainNode).connect(audioContext.destination);
 
     bgMusicGainNode.gain.value = BG_MUSIC_NORMAL_VOLUME;
-    masterGainNode.gain.value = 1;
+    masterGainNode.gain.value = isMuted ? 0 : 1;
 
     const sfxToLoad = {
         sad: '/audio/sad.mp3', wake: '/audio/wake.mp3',
@@ -84,19 +90,29 @@ export async function setupBgMusicWithWebAudio() {
     }
 }
 
-function applyMuteState() {
-    const isMutedNow = bgMusicElement.muted;
-    muteIcon.className = isMutedNow ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
-    localStorage.setItem('isGameMuted', isMutedNow);
+export function applyMuteState() {
+    muteIcon.className = isMuted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
+    localStorage.setItem('isGameMuted', isMuted);
+
+    if (masterGainNode) {
+        masterGainNode.gain.value = isMuted ? 0 : 1;
+    }
+
+    if (isMuted) {
+        bgMusicElement.pause();
+    } else {
+        if (audioContext && audioContext.state === 'running') {
+            bgMusicElement.play().catch(e => { });
+        }
+    }
 }
 
 export function toggleMute() {
-    bgMusicElement.muted = !bgMusicElement.muted;
+    isMuted = !isMuted;
     applyMuteState();
 }
 
 export function loadMuteState() {
-    const savedMuteState = localStorage.getItem('isGameMuted') === 'true';
-    bgMusicElement.muted = savedMuteState;
-    applyMuteState();
+    isMuted = localStorage.getItem('isGameMuted') === 'true';
+    muteIcon.className = isMuted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
 }

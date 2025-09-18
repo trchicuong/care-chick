@@ -1,12 +1,15 @@
 import * as Data from './data.js';
 import * as UI from './ui.js';
 import * as Audio from './audio.js';
+import { isMuted } from './audio.js';
 
 let pet;
 let isAnimating = false;
 let lastUpdateTime = 0;
 let lastInteractionTime = 0;
 let sadAudioSourceNode = null;
+let isShopViewDirty = true;
+let isExploreViewDirty = true;
 
 function savePet() {
     localStorage.setItem('virtualPet', JSON.stringify(pet));
@@ -51,6 +54,7 @@ function applyAbandonmentPenalty() {
 
 function calculateOfflineProgression() {
     if (!pet.lastUpdateTime) return;
+
     const now = Date.now();
     const offlineTime = now - pet.lastUpdateTime;
     const ticksMissed = Math.floor(offlineTime / Data.gameTickInterval);
@@ -78,7 +82,6 @@ function calculateOfflineProgression() {
         applyAbandonmentPenalty();
     }
 }
-
 
 function loadPet() {
     const defaultPet = {
@@ -381,10 +384,10 @@ function startExploration(locationKey) {
         pet.energy -= loc.energyCost;
         pet.isExploring = true;
         pet.explorationData = { locationKey, endTime: Date.now() + loc.duration };
+        isExploreViewDirty = true;
         Swal.fire({ title: 'Bắt đầu Thám hiểm!', text: `Pet sẽ trở về sau ${loc.duration / 60000} phút.`, icon: 'success', timer: 2000, showConfirmButton: false });
         sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
         UI.exploreModal.classList.add('hidden');
-        isExploreViewDirty = true;
     } else {
         Swal.fire('Không đủ Năng lượng!', 'Hãy cho pet ngủ để hồi phục.', 'warning');
     }
@@ -532,14 +535,16 @@ function gameLoop(currentTime) {
     }
 }
 
-let isShopViewDirty = true;
-let isExploreViewDirty = true;
-
 function startGame() {
     UI.splashScreen.classList.add('hidden');
     UI.gameWrapper.classList.remove('hidden');
 
-    UI.bgMusic.play().catch(e => console.error("Lỗi phát nhạc:", e));
+    if (UI.bgMusic) {
+        UI.bgMusic.loop = true;
+        if (!isMuted) {
+            UI.bgMusic.play().catch(e => console.error("Lỗi khởi động nhạc:", e));
+        }
+    }
 
     requestAnimationFrame(gameLoop);
     UI.preloadImages();
