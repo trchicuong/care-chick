@@ -1,7 +1,6 @@
 import { BG_MUSIC_NORMAL_VOLUME, BG_MUSIC_DUCKED_VOLUME } from './data.js';
 import { muteIcon, bgMusic as bgMusicElement } from './ui.js';
 
-let isMuted = false;
 let duckingTimeout = null;
 let audioContext;
 let bgMusicSource;
@@ -17,8 +16,7 @@ async function loadSoundToBuffer(url) {
     try {
         const response = await fetch(url);
         const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        return audioBuffer;
+        return await audioContext.decodeAudioData(arrayBuffer);
     } catch (error) {
         console.error(`Lỗi tải file âm thanh ${url}:`, error);
         return null;
@@ -62,24 +60,18 @@ export function playStart(audio) {
 
 export async function setupBgMusicWithWebAudio() {
     if (audioContext) return;
-
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
     if (audioContext.state === 'suspended') {
         await audioContext.resume();
     }
-
     masterGainNode = audioContext.createGain();
-    masterGainNode.connect(audioContext.destination);
-
     bgMusicGainNode = audioContext.createGain();
-    bgMusicGainNode.connect(masterGainNode);
-
     bgMusicSource = audioContext.createMediaElementSource(bgMusicElement);
-    bgMusicSource.connect(bgMusicGainNode);
+
+    bgMusicSource.connect(bgMusicGainNode).connect(masterGainNode).connect(audioContext.destination);
 
     bgMusicGainNode.gain.value = BG_MUSIC_NORMAL_VOLUME;
-    masterGainNode.gain.value = isMuted ? 0 : 1;
+    masterGainNode.gain.value = 1;
 
     const sfxToLoad = {
         sad: '/audio/sad.mp3', wake: '/audio/wake.mp3',
@@ -92,21 +84,19 @@ export async function setupBgMusicWithWebAudio() {
     }
 }
 
-export function applyMuteState() {
-    muteIcon.className = isMuted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
-    localStorage.setItem('isGameMuted', isMuted);
-
-    if (masterGainNode) {
-        masterGainNode.gain.value = isMuted ? 0 : 1;
-    }
+function applyMuteState() {
+    const isMutedNow = bgMusicElement.muted;
+    muteIcon.className = isMutedNow ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
+    localStorage.setItem('isGameMuted', isMutedNow);
 }
 
 export function toggleMute() {
-    isMuted = !isMuted;
+    bgMusicElement.muted = !bgMusicElement.muted;
     applyMuteState();
 }
 
 export function loadMuteState() {
-    isMuted = localStorage.getItem('isGameMuted') === 'true';
+    const savedMuteState = localStorage.getItem('isGameMuted') === 'true';
+    bgMusicElement.muted = savedMuteState;
     applyMuteState();
 }

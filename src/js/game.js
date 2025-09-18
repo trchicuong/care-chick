@@ -51,7 +51,6 @@ function applyAbandonmentPenalty() {
 
 function calculateOfflineProgression() {
     if (!pet.lastUpdateTime) return;
-
     const now = Date.now();
     const offlineTime = now - pet.lastUpdateTime;
     const ticksMissed = Math.floor(offlineTime / Data.gameTickInterval);
@@ -312,6 +311,7 @@ function buyItem(itemKey) {
         } else {
             updateInventory(itemKey, 1);
             UI.renderInventory(pet);
+            isShopViewDirty = true;
         }
         Swal.fire(notificationMessage);
         sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
@@ -384,6 +384,7 @@ function startExploration(locationKey) {
         Swal.fire({ title: 'Bắt đầu Thám hiểm!', text: `Pet sẽ trở về sau ${loc.duration / 60000} phút.`, icon: 'success', timer: 2000, showConfirmButton: false });
         sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
         UI.exploreModal.classList.add('hidden');
+        isExploreViewDirty = true;
     } else {
         Swal.fire('Không đủ Năng lượng!', 'Hãy cho pet ngủ để hồi phục.', 'warning');
     }
@@ -407,6 +408,7 @@ function finishExploration(isOffline = false) {
 
     pet.isExploring = false;
     pet.explorationData = null;
+    isExploreViewDirty = true;
 
     const notification = {
         title: 'Thám hiểm Hoàn tất!',
@@ -418,6 +420,7 @@ function finishExploration(isOffline = false) {
         pet.pendingNotifications.push(notification);
     } else {
         UI.renderInventory(pet);
+        UI.renderExploreLocations(pet);
         Swal.fire(notification);
         sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
     }
@@ -442,13 +445,13 @@ function checkEvolution() {
     } else if (pet.stage === Data.CONSTANTS.STAGE_BABY && pet.age >= 10 && isWellCaredFor) {
         pet.stage = 'lv1';
         pet.coins += 100;
-        UI.renderExploreLocations(pet);
+        isExploreViewDirty = true;
     } else if (pet.stage.startsWith(Data.CONSTANTS.LEVEL_PREFIX)) {
         if (currentLv < 15 && pet.age >= (10 + currentLv * 20) && isWellCaredFor) {
             const newLv = currentLv + 1;
             pet.stage = `lv${newLv}`;
             pet.coins += 100 * newLv;
-            UI.renderExploreLocations(pet);
+            isExploreViewDirty = true;
             if (newLv === 15) {
                 updateInventory('ngoi_sao_hy_vong', 1);
                 Swal.fire({ title: 'Đạt đến Giới hạn!', text: 'Pet đã đạt cấp tiến hóa tối đa và nhận được Ngôi Sao Hy Vọng!', icon: 'success' });
@@ -529,14 +532,14 @@ function gameLoop(currentTime) {
     }
 }
 
+let isShopViewDirty = true;
+let isExploreViewDirty = true;
+
 function startGame() {
     UI.splashScreen.classList.add('hidden');
     UI.gameWrapper.classList.remove('hidden');
 
-    if (UI.bgMusic && UI.bgMusic.paused) {
-        UI.bgMusic.muted = false;
-        UI.bgMusic.play().catch(e => console.error("Lỗi phát nhạc:", e));
-    }
+    UI.bgMusic.play().catch(e => console.error("Lỗi phát nhạc:", e));
 
     requestAnimationFrame(gameLoop);
     UI.preloadImages();
@@ -561,9 +564,7 @@ async function displayPendingNotifications() {
 
 export function init() {
     loadPet();
-    UI.renderShop();
     UI.renderInventory(pet);
-    UI.renderExploreLocations(pet);
     Audio.loadMuteState();
 
     const addSmartEventListener = (element, callback) => {
@@ -581,7 +582,6 @@ export function init() {
             }
         };
         const onCancel = () => element.classList.remove('button-active');
-
         element.addEventListener('mousedown', onPress);
         element.addEventListener('touchstart', onPress, { passive: false });
         element.addEventListener('mouseup', onRelease);
@@ -602,11 +602,31 @@ export function init() {
     addSmartEventListener(UI.cureButton, cure);
     addSmartEventListener(UI.sleepButton, toggleSleep);
 
-    addSmartEventListener(UI.openShopButton, () => { Audio.playSound('click'); UI.shopModal.classList.remove('hidden'); });
+    addSmartEventListener(UI.openShopButton, () => {
+        Audio.playSound('click');
+        if (isShopViewDirty) {
+            UI.renderShop(pet);
+            isShopViewDirty = false;
+        }
+        UI.shopModal.classList.remove('hidden');
+    });
+
+    addSmartEventListener(UI.openInventoryButton, () => {
+        Audio.playSound('click');
+        UI.inventoryModal.classList.remove('hidden');
+    });
+
+    addSmartEventListener(UI.exploreButton, () => {
+        Audio.playSound('click');
+        if (isExploreViewDirty) {
+            UI.renderExploreLocations(pet);
+            isExploreViewDirty = false;
+        }
+        UI.exploreModal.classList.remove('hidden');
+    });
+
     addSmartEventListener(UI.closeShopButton, () => { Audio.playSound('click'); UI.shopModal.classList.add('hidden'); });
-    addSmartEventListener(UI.openInventoryButton, () => { Audio.playSound('click'); UI.inventoryModal.classList.remove('hidden'); });
     addSmartEventListener(UI.closeInventoryButton, () => { Audio.playSound('click'); UI.inventoryModal.classList.add('hidden'); });
-    addSmartEventListener(UI.exploreButton, () => { Audio.playSound('click'); UI.exploreModal.classList.remove('hidden'); });
     addSmartEventListener(UI.closeExploreButton, () => { Audio.playSound('click'); UI.exploreModal.classList.add('hidden'); });
 
     addSmartEventListener(UI.infoButton, () => {

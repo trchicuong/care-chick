@@ -166,22 +166,34 @@ export function updateDisplay(pet, isAnimating, sadAudioSourceNode, playSfxFromB
     return newSadAudioNode;
 }
 
-export function renderShop() {
+export function renderShop(pet) {
     let foodHtml = '', decorHtml = '', toolHtml = '';
 
     for (const key in SHOP_ITEMS) {
         const item = SHOP_ITEMS[key];
         if (item.type === CONSTANTS.TYPE_MATERIAL) continue;
 
-        const buySectionHtml = item.price
-            ? `<div class="item-buy-section">
-                   <span class="item-price">${item.price}<img src="/images/icons/coin-icon.png" class="coin-icon"></span>
-                   <button class="buy-button" data-item-key="${key}">Mua</button>
-               </div>`
-            : `<div class="item-buy-section">
-                   <span class="item-price" style="font-size: 3em;">∞<img src="/images/icons/coin-icon.png" class="coin-icon"></span>
-                   <button disabled style="background-color: #ccc; cursor: not-allowed;">Ghép</button>
-               </div>`;
+        let buySectionHtml;
+
+        const isOwned = pet.inventory[key];
+
+        if (item.type !== CONSTANTS.TYPE_FOOD && isOwned) {
+            buySectionHtml = `<div class="item-buy-section"><button class="owned-button" disabled>Có</button></div>`;
+        } else {
+            if (item.price) {
+                buySectionHtml = `
+                <div class="item-buy-section">
+                    <span class="item-price">${item.price}<img src="/images/icons/coin-icon.png" class="coin-icon"></span>
+                        <button class="buy-button" data-item-key="${key}">Mua</button>
+                </div>`;
+            } else {
+                buySectionHtml = `
+                <div class="item-buy-section">
+                    <span class="item-price" style="font-size: 3em;">∞<img src="/images/icons/coin-icon.png" class="coin-icon"></span>
+                        <button disabled style="background-color: #ccc; cursor: not-allowed;">Ghép</button>
+                </div>`;
+            }
+        }
 
         const liHtml = `
             <li>
@@ -192,9 +204,13 @@ export function renderShop() {
                 ${buySectionHtml}
             </li>`;
 
-        if (item.type === CONSTANTS.TYPE_FOOD) foodHtml += liHtml;
-        else if (item.type === CONSTANTS.TYPE_TOOL) toolHtml += liHtml;
-        else decorHtml += liHtml;
+        if (item.type === CONSTANTS.TYPE_FOOD) {
+            foodHtml += liHtml;
+        } else if (item.type === CONSTANTS.TYPE_TOOL) {
+            toolHtml += liHtml;
+        } else {
+            decorHtml += liHtml;
+        }
     }
 
     shopFoodList.innerHTML = foodHtml;
@@ -215,6 +231,18 @@ export function renderExploreLocations(pet) {
     for (const key in EXPLORE_LOCATIONS) {
         const loc = EXPLORE_LOCATIONS[key];
         const isUnlocked = currentLv >= loc.levelReq && pet.age >= loc.ageReq;
+        const isExploringThisLocation = pet.isExploring && pet.explorationData.locationKey === key;
+
+        let buttonText = 'Đi';
+        let buttonClass = 'start-explore-button';
+
+        if (isExploringThisLocation) {
+            buttonText = 'Đang';
+            buttonClass = 'exploring-button';
+        } else if (!isUnlocked) {
+            buttonText = 'Khóa';
+        }
+
         locationsHtml += `
             <li style="opacity: ${isUnlocked ? '1' : '0.6'};">
                 <div class="item-info">
@@ -222,8 +250,11 @@ export function renderExploreLocations(pet) {
                     <p style="font-size: 10px; color: green;">Thời gian: ${loc.duration / 60000} phút, Năng lượng: ${loc.energyCost}</p>
                     <p style="font-size: 10px; font-style: italic;">${loc.description}</p>
                 </div>
-                <button class="start-explore-button" data-location-key="${key}" ${isUnlocked ? '' : 'disabled'}>
-                    ${isUnlocked ? 'Đi' : `Khóa`}
+                <button 
+                    class="${buttonClass}" 
+                    data-location-key="${key}" 
+                    ${!isUnlocked || pet.isExploring ? 'disabled' : ''}>
+                    ${buttonText}
                 </button>
             </li>`;
     }
@@ -272,7 +303,7 @@ export function renderInventory(pet) {
                     <p style="font-size: 10px; font-style: italic;">${materialsHtml}</p>
                 </div>
                 <button class="craft-button" data-recipe-key="${recipeKey}" ${canCraft ? '' : 'disabled'}>
-                    ${pet.inventory[recipeKey] ? 'Đã có' : 'Ghép'}
+                    ${pet.inventory[recipeKey] ? 'Có' : 'Ghép'}
                 </button>
             </li>`;
     }
