@@ -10,9 +10,17 @@ let lastInteractionTime = 0;
 let sadAudioSourceNode = null;
 let isShopViewDirty = true;
 let isExploreViewDirty = true;
+let isPetStateDirty = false;
+
+function markStateAsDirty() {
+    isPetStateDirty = true;
+}
 
 function savePet() {
-    localStorage.setItem('virtualPet', JSON.stringify(pet));
+    if (isPetStateDirty) {
+        localStorage.setItem('virtualPet', JSON.stringify(pet));
+        isPetStateDirty = false;
+    }
 }
 
 function updateInventory(itemKey, quantity) {
@@ -23,6 +31,7 @@ function updateInventory(itemKey, quantity) {
     if (pet.inventory[itemKey] <= 0) {
         delete pet.inventory[itemKey];
     }
+    markStateAsDirty();
 }
 
 function getCurrentLevel() {
@@ -50,6 +59,7 @@ function applyAbandonmentPenalty() {
     pet.isSick = false;
     pet.sickTimestamp = null;
     pet.sadTicks = 0;
+    markStateAsDirty();
 }
 
 function calculateOfflineProgression() {
@@ -81,6 +91,10 @@ function calculateOfflineProgression() {
     if (offlineTime > threeDays && pet.stage !== Data.CONSTANTS.STAGE_EGG) {
         applyAbandonmentPenalty();
     }
+
+    if (ticksMissed > 0) {
+        markStateAsDirty();
+    }
 }
 
 function loadPet() {
@@ -110,7 +124,6 @@ function loadPet() {
             delete pet.ownedItems;
         }
 
-        calculateOfflineProgression();
     } else {
         pet = defaultPet;
     }
@@ -128,6 +141,31 @@ function checkGameOver() {
     return false;
 }
 
+function calculateActionEffects(actionType, inventory) {
+    const baseEffects = {
+        feed_free: { hunger: -10, happiness: 2, coins: 0 },
+        play: { happiness: 15, hunger: 5, coins: 10 },
+        clean: { cleanliness: 20, happiness: 2, coins: 5 }
+    };
+
+    const effects = { ...baseEffects[actionType] };
+
+    for (const itemKey in inventory) {
+        const item = Data.ALL_ITEMS[itemKey];
+        if (item && item.bonuses && item.bonuses[actionType]) {
+            const bonus = item.bonuses[actionType];
+            for (const effectKey in bonus) {
+                if (effectKey.includes('Multiplier')) {
+                    effects[effectKey] = (effects[effectKey] || 1) * bonus[effectKey];
+                } else {
+                    effects[effectKey] = (effects[effectKey] || 0) + bonus[effectKey];
+                }
+            }
+        }
+    }
+    return effects;
+}
+
 function handleAction(actionType) {
     if (isAnimating || pet.isSick || pet.isSleeping || pet.isExploring) return;
 
@@ -141,86 +179,43 @@ function handleAction(actionType) {
     }
 
     isAnimating = true;
-    let animSrc = '';
+    const effects = calculateActionEffects(actionType, pet.inventory);
 
-    switch (actionType) {
-        case 'feed_free':
-            Audio.playSound('eat');
-            let hungerRestore = 10;
-            let happinessGainFeed = 2;
-            let coinsGainFeed = 0;
-            if (pet.inventory['chen_an_vui_ve']) {
-                hungerRestore += 5;
-                happinessGainFeed += 3;
-            }
-            if (pet.inventory['bo_chen_dua_tinh_xao']) {
-                hungerRestore += 7;
-                happinessGainFeed += 5;
-            }
-            if (pet.inventory['bi_kip_nau_nuong']) {
-                hungerRestore += 8;
-                happinessGainFeed += 5;
-                if (Math.random() < 0.25) {
-                    const bonusCoins = 25;
-                    coinsGainFeed += bonusCoins;
-                    Swal.fire({ title: 'Món Phụ Bất Ngờ!', text: `Bạn đã nhận thêm ${bonusCoins} Xu!`, icon: 'info', timer: 2000, showConfirmButton: false });
-                }
-            }
-            pet.hunger = Math.max(Data.CONSTANTS.MIN_STAT, pet.hunger - hungerRestore);
-            pet.happiness = Math.min(Data.CONSTANTS.MAX_STAT, pet.happiness + happinessGainFeed);
-            pet.coins += coinsGainFeed;
-            animSrc = '/images/eating.png';
-            break;
-        case 'play':
-            Audio.playSound('click');
-            let happinessGain = 15;
-            let coinsGainPlay = 10;
-            if (pet.inventory['bong_do_choi']) {
-                happinessGain += 10;
-                coinsGainPlay += 5;
-            }
-            if (pet.inventory['sach_tri_tue']) {
-                happinessGain += 10;
-                coinsGainPlay *= 2.5;
-            }
-            pet.happiness = Math.min(Data.CONSTANTS.MAX_STAT, pet.happiness + happinessGain);
-            pet.hunger = Math.min(Data.CONSTANTS.MAX_STAT, pet.hunger + 5);
-            pet.coins += Math.floor(coinsGainPlay);
-            animSrc = '/images/playing.png';
-            break;
-        case 'clean':
-            Audio.playSound('clean');
-            let cleanlinessGain = 20;
-            let coinsGainClean = 5;
-            if (pet.inventory['xa_bong_thom']) {
-                cleanlinessGain += 10;
-                coinsGainClean += 5;
-            }
-            if (pet.inventory['voi_hoa_sen_vang']) {
-                cleanlinessGain += 10;
-                pet.energy = Math.min(Data.CONSTANTS.MAX_STAT, pet.energy + getCurrentLevel());
-                if (Math.random() < 0.10) {
-                    if (!pet.activeBuffs) pet.activeBuffs = {};
-                    pet.activeBuffs['decayReducer'] = {
-                        multiplier: 0.8,
-                        endTime: Date.now() + 300000
-                    };
-                    Swal.fire({ title: 'Thư Giãn!', text: 'Pet cảm thấy thư thái và ít bị đói hơn trong 5 phút tới!', icon: 'info', timer: 3000, showConfirmButton: false });
-                }
-            }
-            pet.cleanliness = Math.min(Data.CONSTANTS.MAX_STAT, pet.cleanliness + cleanlinessGain);
-            pet.happiness = Math.min(Data.CONSTANTS.MAX_STAT, pet.happiness + 2);
-            pet.coins += coinsGainClean;
-            animSrc = '/images/clean.png';
-            break;
+    if (effects.hunger) pet.hunger = Math.max(Data.CONSTANTS.MIN_STAT, pet.hunger + effects.hunger);
+    if (effects.happiness) pet.happiness = Math.min(Data.CONSTANTS.MAX_STAT, pet.happiness + effects.happiness);
+    if (effects.cleanliness) pet.cleanliness = Math.min(Data.CONSTANTS.MAX_STAT, pet.cleanliness + effects.cleanliness);
+
+    let coinsGained = effects.coins || 0;
+    if (effects.coinMultiplier) coinsGained *= effects.coinMultiplier;
+    pet.coins += Math.floor(coinsGained);
+
+    if (effects.bonusCoinChance && Math.random() < effects.bonusCoinChance) {
+        pet.coins += effects.bonusCoinAmount;
+        Swal.fire({ title: 'Món Phụ Bất Ngờ!', text: `Bạn nhận thêm ${effects.bonusCoinAmount} Xu!`, icon: 'info', timer: 2000, showConfirmButton: false });
+    }
+    if (effects.energyPerLevel) {
+        pet.energy = Math.min(Data.CONSTANTS.MAX_STAT, pet.energy + getCurrentLevel() * effects.energyPerLevel);
+    }
+    if (effects.buffChance && Math.random() < effects.buffChance) {
+        if (!pet.activeBuffs) pet.activeBuffs = {};
+        pet.activeBuffs['decayReducer'] = {
+            multiplier: 0.8,
+            endTime: Date.now() + 300000
+        };
+        Swal.fire({ title: 'Thư Giãn!', text: 'Pet cảm thấy thư thái và ít bị đói hơn trong 5 phút tới!', icon: 'info', timer: 3000, showConfirmButton: false });
     }
 
     pet.energy = Math.max(0, pet.energy - 1);
-    UI.petImage.src = animSrc;
+    markStateAsDirty();
+
+    const animMap = { feed_free: '/images/eating.png', play: '/images/playing.png', clean: '/images/clean.png' };
+    const soundMap = { feed_free: 'eat', play: 'click', clean: 'clean' };
+    UI.petImage.src = animMap[actionType];
+    Audio.playSound(soundMap[actionType]);
+
     setTimeout(() => {
         isAnimating = false;
         sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
-        savePet();
     }, 800);
 }
 
@@ -241,6 +236,7 @@ function toggleSleep() {
             Swal.fire({ title: 'Chưa buồn ngủ!', text: 'Pet vẫn còn đầy năng lượng.', icon: 'info', confirmButtonText: 'OK' });
         }
     }
+    markStateAsDirty();
     sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
 }
 
@@ -256,6 +252,7 @@ function cure() {
             pet.sickTimestamp = null;
             pet.sadTicks = 0;
             pet.hunger = 50; pet.happiness = 50; pet.cleanliness = 70;
+            markStateAsDirty();
             Swal.fire({ title: 'Thành công!', text: `Bạn đã dùng ${cureCost} Xu để chữa bệnh!`, icon: 'success' });
             sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
         } else {
@@ -265,13 +262,13 @@ function cure() {
 }
 
 function buyItem(itemKey) {
-    const item = Data.SHOP_ITEMS[itemKey];
+    const item = Data.ALL_ITEMS[itemKey];
     if (!item) return;
 
-    if (item.type === Data.CONSTANTS.TYPE_FOOD && (pet.isSick || pet.isSleeping || pet.isExploring)) {
+    if (item.type === 'food' && (pet.isSick || pet.isSleeping || pet.isExploring)) {
         return Swal.fire('Không thể mua', 'Không thể mua thức ăn khi pet ốm, ngủ, hoặc đang thám hiểm!', 'warning');
     }
-    if (item.type !== Data.CONSTANTS.TYPE_FOOD && pet.inventory[itemKey]) {
+    if (item.type !== 'food' && pet.inventory[itemKey]) {
         return Swal.fire('Thông báo', 'Bạn đã sở hữu vật phẩm này!', 'info');
     }
 
@@ -280,7 +277,7 @@ function buyItem(itemKey) {
         pet.coins -= item.price;
         let notificationMessage = { title: 'Mua thành công!', text: `Đã mua ${item.name}!`, icon: 'success', timer: 1500, showConfirmButton: false };
 
-        if (item.type === Data.CONSTANTS.TYPE_FOOD) {
+        if (item.type === 'food') {
             if (item.hunger !== undefined) pet.hunger = Math.max(Data.CONSTANTS.MIN_STAT, pet.hunger + item.hunger);
             if (item.happiness !== undefined) pet.happiness = Math.min(Data.CONSTANTS.MAX_STAT, pet.happiness + item.happiness);
             if (item.satietyDuration !== undefined) pet.satietyBonus += item.satietyDuration;
@@ -316,6 +313,7 @@ function buyItem(itemKey) {
             UI.renderInventory(pet);
             isShopViewDirty = true;
         }
+        markStateAsDirty();
         Swal.fire(notificationMessage);
         sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
         UI.shopModal.classList.add('hidden');
@@ -344,7 +342,7 @@ function craftItem(recipeKey) {
 
     updateInventory(recipeKey, 1);
     Audio.playSound('pay');
-    Swal.fire({ title: 'Chế tạo thành công!', text: `Bạn đã tạo ra ${Data.SHOP_ITEMS[recipeKey].name}!`, icon: 'success' });
+    Swal.fire({ title: 'Chế tạo thành công!', text: `Bạn đã tạo ra ${Data.ALL_ITEMS[recipeKey].name}!`, icon: 'success' });
     UI.renderInventory(pet);
 }
 
@@ -359,13 +357,14 @@ function equipItem(itemKey) {
     } else if (itemKey === Data.CONSTANTS.DEFAULT_BG) {
         pet.background = Data.CONSTANTS.DEFAULT_BG;
     } else {
-        const item = Data.SHOP_ITEMS[itemKey];
-        if (item.type === Data.CONSTANTS.TYPE_ACCESSORY) {
+        const item = Data.ALL_ITEMS[itemKey];
+        if (item.type === 'accessory') {
             pet.accessories[item.slot] = itemKey;
-        } else if (item.type === Data.CONSTANTS.TYPE_BACKGROUND) {
+        } else if (item.type === 'background') {
             pet.background = itemKey;
         }
     }
+    markStateAsDirty();
     sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
     UI.inventoryModal.classList.add('hidden');
 }
@@ -385,6 +384,7 @@ function startExploration(locationKey) {
         pet.isExploring = true;
         pet.explorationData = { locationKey, endTime: Date.now() + loc.duration };
         isExploreViewDirty = true;
+        markStateAsDirty();
         Swal.fire({ title: 'Bắt đầu Thám hiểm!', text: `Pet sẽ trở về sau ${loc.duration / 60000} phút.`, icon: 'success', timer: 2000, showConfirmButton: false });
         sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
         UI.exploreModal.classList.add('hidden');
@@ -406,12 +406,13 @@ function finishExploration(isOffline = false) {
         randomNum -= reward.weight;
     }
 
-    const rewardItem = Data.SHOP_ITEMS[rewardKey];
+    const rewardItem = Data.ALL_ITEMS[rewardKey];
     updateInventory(rewardKey, 1);
 
     pet.isExploring = false;
     pet.explorationData = null;
     isExploreViewDirty = true;
+    markStateAsDirty();
 
     const notification = {
         title: 'Thám hiểm Hoàn tất!',
@@ -438,28 +439,25 @@ function checkEvolution() {
     if (pet.ageTicks >= 60) {
         pet.age++;
         pet.ageTicks = 0;
+        markStateAsDirty();
     }
 
     const isWellCaredFor = pet.happiness > 50 && pet.cleanliness > 50 && pet.hunger < 50;
-    const currentLv = getCurrentLevel();
+    if (!isWellCaredFor) return;
 
-    if (pet.stage === Data.CONSTANTS.STAGE_EGG && pet.age >= 1) {
-        pet.stage = Data.CONSTANTS.STAGE_BABY;
-    } else if (pet.stage === Data.CONSTANTS.STAGE_BABY && pet.age >= 10 && isWellCaredFor) {
-        pet.stage = 'lv1';
-        pet.coins += 100;
-        isExploreViewDirty = true;
-    } else if (pet.stage.startsWith(Data.CONSTANTS.LEVEL_PREFIX)) {
-        if (currentLv < 15 && pet.age >= (10 + currentLv * 20) && isWellCaredFor) {
-            const newLv = currentLv + 1;
-            pet.stage = `lv${newLv}`;
-            pet.coins += 100 * newLv;
-            isExploreViewDirty = true;
-            if (newLv === 15) {
-                updateInventory('ngoi_sao_hy_vong', 1);
-                Swal.fire({ title: 'Đạt đến Giới hạn!', text: 'Pet đã đạt cấp tiến hóa tối đa và nhận được Ngôi Sao Hy Vọng!', icon: 'success' });
+    const nextStage = Data.EVOLUTION_STAGES.find(stage => stage.from === pet.stage);
+
+    if (nextStage && pet.age >= nextStage.requiredAge) {
+        pet.stage = nextStage.to;
+        if (nextStage.coins) pet.coins += nextStage.coins;
+        if (nextStage.specialReward) {
+            for (const itemKey in nextStage.specialReward) {
+                updateInventory(itemKey, nextStage.specialReward[itemKey]);
             }
+            Swal.fire({ title: 'Đạt đến Giới hạn!', text: 'Pet đã đạt cấp tiến hóa tối đa và nhận được phần thưởng đặc biệt!', icon: 'success' });
         }
+        isExploreViewDirty = true;
+        markStateAsDirty();
     }
 }
 
@@ -487,9 +485,12 @@ function gameLoop(currentTime) {
             if (checkGameOver()) return;
         }
         else if (pet.isSleeping) {
+            const oldEnergy = pet.energy;
             const currentLv = getCurrentLevel();
             const energyPerTick = Math.max(0.2, 1.0 - ((currentLv - 1) * 0.048));
             pet.energy = Math.min(Data.CONSTANTS.MAX_STAT, pet.energy + energyPerTick);
+
+            if (pet.energy !== oldEnergy) markStateAsDirty();
 
             if (pet.energy >= Data.CONSTANTS.MAX_STAT) {
                 pet.isSleeping = false;
@@ -528,6 +529,7 @@ function gameLoop(currentTime) {
                 pet.sickTimestamp = Date.now();
             }
             checkEvolution();
+            markStateAsDirty();
         }
 
         sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
@@ -562,16 +564,13 @@ async function displayPendingNotifications() {
             });
         }
         pet.pendingNotifications = [];
+        markStateAsDirty();
         UI.renderInventory(pet);
         sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
     }
 }
 
-export function init() {
-    loadPet();
-    UI.renderInventory(pet);
-    Audio.loadMuteState();
-
+function setupEventListeners() {
     const addSmartEventListener = (element, callback) => {
         let touchStarted = false;
         const onPress = (e) => {
@@ -700,6 +699,13 @@ export function init() {
         });
     };
     [UI.shopFoodList, UI.shopDecorList, UI.shopToolList, UI.inventoryHatList, UI.inventoryBgList, UI.craftingRecipeList, UI.exploreLocationList].forEach(setupListListeners);
+}
 
+export function init() {
+    loadPet();
+    calculateOfflineProgression();
+    UI.renderInventory(pet);
     sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
+    Audio.loadMuteState();
+    setupEventListeners();
 }

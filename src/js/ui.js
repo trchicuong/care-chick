@@ -1,4 +1,4 @@
-import { CONSTANTS, SHOP_ITEMS, EXPLORE_LOCATIONS, CRAFTING_RECIPES } from './data.js';
+import { CONSTANTS, SHOP_ITEMS, ALL_ITEMS, EXPLORE_LOCATIONS, CRAFTING_RECIPES } from './data.js';
 
 export const getEl = (id) => document.getElementById(id);
 
@@ -64,15 +64,14 @@ export function preloadImages() {
     });
 }
 
-export function updateDisplay(pet, isAnimating, sadAudioSourceNode, playSfxFromBuffer) {
-    if (isAnimating) {
-        return sadAudioSourceNode;
-    }
-
+function updateStatBars(pet) {
     hungerBar.style.width = `${100 - pet.hunger}%`;
     happinessBar.style.width = `${pet.happiness}%`;
     cleanlinessBar.style.width = `${pet.cleanliness}%`;
     energyBar.style.width = `${pet.energy}%`;
+}
+
+function updateMainInfo(pet) {
     if (coinCountDisplay.textContent != pet.coins) {
         coinCountDisplay.textContent = pet.coins;
     }
@@ -81,121 +80,80 @@ export function updateDisplay(pet, isAnimating, sadAudioSourceNode, playSfxFromB
     }
 
     let levelText = '';
-    if (pet.stage === CONSTANTS.STAGE_EGG) {
-        levelText = 'Trứng';
-    } else if (pet.stage === CONSTANTS.STAGE_BABY) {
-        levelText = 'Gà Con';
-    } else if (pet.stage.startsWith(CONSTANTS.LEVEL_PREFIX)) {
-        const levelNumber = pet.stage.replace(CONSTANTS.LEVEL_PREFIX, '');
-        levelText = `${levelNumber}`;
-    }
+    if (pet.stage === CONSTANTS.STAGE_EGG) levelText = 'Trứng';
+    else if (pet.stage === CONSTANTS.STAGE_BABY) levelText = 'Gà Con';
+    else if (pet.stage.startsWith(CONSTANTS.LEVEL_PREFIX)) levelText = pet.stage.replace(CONSTANTS.LEVEL_PREFIX, '');
     levelDisplay.textContent = levelText;
+}
+
+function updatePetVisuals(pet, isAnimating) {
+    if (isAnimating) return;
 
     document.body.classList.toggle('night', pet.isSleeping);
+    petBackground.style.backgroundImage = pet.background === CONSTANTS.DEFAULT_BG ? '' : `url('${ALL_ITEMS[pet.background].image}')`;
+    petHat.style.display = pet.accessories.hat ? 'block' : 'none';
+    if (pet.accessories.hat) petHat.src = ALL_ITEMS[pet.accessories.hat].image;
 
-    petBackground.style.backgroundImage = pet.background === CONSTANTS.DEFAULT_BG
-        ? ''
-        : `url('${SHOP_ITEMS[pet.background].image}')`;
-
-    if (pet.accessories.hat) {
-        petHat.src = SHOP_ITEMS[pet.accessories.hat].image;
-        petHat.style.display = 'block';
-    } else {
-        petHat.style.display = 'none';
-    }
-
-    const allActionButtons = [feedButton, playButton, cleanButton, sleepButton, cureButton, openShopButton, openInventoryButton, exploreButton];
-    allActionButtons.forEach(btn => {
-        btn.disabled = false;
-        btn.style.display = 'inline-block';
-    });
-
-    cureButton.style.display = 'none';
-    statusText.textContent = '';
     let newImageSrc = '';
-    let newSadAudioNode = sadAudioSourceNode;
+    if (pet.isExploring) newImageSrc = '/images/exploring.png';
+    else if (pet.isSick) newImageSrc = '/images/sick.png';
+    else if (pet.isSleeping) newImageSrc = '/images/sleeping.png';
+    else if (pet.stage === CONSTANTS.STAGE_EGG) newImageSrc = '/images/egg.png';
+    else if (pet.hunger > 80 || pet.happiness < 20 || pet.cleanliness < 20 || pet.energy < 10) newImageSrc = '/images/sad.png';
+    else newImageSrc = pet.stage.startsWith(CONSTANTS.LEVEL_PREFIX) ? `/images/levels/${pet.stage}.png` : `/images/${pet.stage}.png`;
 
+    if (!petImage.src.endsWith(newImageSrc)) petImage.src = newImageSrc;
+}
+
+function updateUIState(pet) {
+    const isBusy = pet.isExploring || pet.isSick || pet.isSleeping;
+    [feedButton, playButton, cleanButton, sleepButton].forEach(btn => btn.disabled = isBusy);
+
+    cureButton.style.display = pet.isSick ? 'inline-block' : 'none';
+    [feedButton, playButton, cleanButton, sleepButton].forEach(btn => btn.style.display = pet.isSick ? 'none' : 'inline-block');
+    if (pet.stage === CONSTANTS.STAGE_EGG) sleepButton.style.display = 'none';
+
+    statusText.textContent = '';
     if (pet.isExploring) {
         const timeLeft = Math.max(0, pet.explorationData.endTime - Date.now());
         const minutes = Math.floor(timeLeft / 60000);
         const seconds = Math.floor((timeLeft % 60000) / 1000);
-        newImageSrc = '/images/exploring.png';
         statusText.textContent = `Thám hiểm... ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-        [feedButton, playButton, cleanButton, sleepButton, cureButton].forEach(btn => btn.disabled = true);
-        if (sadAudioSourceNode) {
-            sadAudioSourceNode.stop(0);
-            newSadAudioNode = null;
-        }
-    } else if (pet.isSick) {
-        newImageSrc = '/images/sick.png';
-        statusText.textContent = 'Bị ốm rồi!';
-        cureButton.style.display = 'inline-block';
-        [feedButton, playButton, cleanButton, sleepButton].forEach(btn => btn.style.display = 'none');
-        if (sadAudioSourceNode) {
-            sadAudioSourceNode.stop(0);
-            newSadAudioNode = null;
-        }
-    } else if (pet.isSleeping) {
-        newImageSrc = '/images/sleeping.png';
-        statusText.textContent = 'Đang ngủ...Zzz';
-        [feedButton, playButton, cleanButton].forEach(btn => btn.disabled = true);
-        if (sadAudioSourceNode) {
-            sadAudioSourceNode.stop(0);
-            newSadAudioNode = null;
-        }
-    } else if (pet.stage === CONSTANTS.STAGE_EGG) {
-        newImageSrc = '/images/egg.png';
-        sleepButton.style.display = 'none';
-    } else if (pet.hunger > 80 || pet.happiness < 20 || pet.cleanliness < 20 || pet.energy < 10) {
-        newImageSrc = '/images/sad.png';
-        if (!sadAudioSourceNode) {
-            newSadAudioNode = playSfxFromBuffer('sad', true);
-        }
-    } else {
-        if (sadAudioSourceNode) {
-            sadAudioSourceNode.stop(0);
-            newSadAudioNode = null;
-        }
-        newImageSrc = pet.stage.startsWith(CONSTANTS.LEVEL_PREFIX) ? `/images/levels/${pet.stage}.png` : `/images/${pet.stage}.png`;
-    }
+    } else if (pet.isSick) statusText.textContent = 'Bị ốm rồi!';
+    else if (pet.isSleeping) statusText.textContent = 'Đang ngủ...Zzz';
+}
 
-    if (!petImage.src.endsWith(newImageSrc)) {
-        petImage.src = newImageSrc;
-    }
+export function updateDisplay(pet, isAnimating, sadAudioSourceNode, playSfxFromBuffer) {
+    updateStatBars(pet);
+    updateMainInfo(pet);
+    updatePetVisuals(pet, isAnimating);
+    updateUIState(pet);
 
-    return newSadAudioNode;
+    const isSad = !isAnimating && !pet.isExploring && !pet.isSick && !pet.isSleeping && (pet.hunger > 80 || pet.happiness < 20 || pet.cleanliness < 20 || pet.energy < 10);
+    if (isSad && !sadAudioSourceNode) return playSfxFromBuffer('sad', true);
+    if (!isSad && sadAudioSourceNode) {
+        sadAudioSourceNode.stop(0);
+        return null;
+    }
+    return sadAudioSourceNode;
 }
 
 export function renderShop(pet) {
-    let foodHtml = '', decorHtml = '', toolHtml = '';
-
-    for (const key in SHOP_ITEMS) {
-        const item = SHOP_ITEMS[key];
-        if (item.type === CONSTANTS.TYPE_MATERIAL) continue;
-
-        let buySectionHtml;
-
+    const createItemHTML = (item, key, category) => {
         const isOwned = pet.inventory[key];
+        let buySectionHtml = '';
 
-        if (item.type !== CONSTANTS.TYPE_FOOD && isOwned) {
+        if (category !== 'food' && isOwned) {
             buySectionHtml = `<div class="item-buy-section"><button class="owned-button" disabled>Có</button></div>`;
         } else {
-            if (item.price) {
-                buySectionHtml = `
-                <div class="item-buy-section">
-                    <span class="item-price">${item.price}<img src="/images/icons/coin-icon.png" class="coin-icon"></span>
-                        <button class="buy-button" data-item-key="${key}">Mua</button>
-                </div>`;
-            } else {
-                buySectionHtml = `
-                <div class="item-buy-section">
-                    <span class="item-price" style="font-size: 3em;">∞<img src="/images/icons/coin-icon.png" class="coin-icon"></span>
-                        <button disabled style="background-color: #ccc; cursor: not-allowed;">Ghép</button>
-                </div>`;
-            }
+            buySectionHtml = `
+            <div class="item-buy-section">
+                <span class="item-price">${item.price}<img src="/images/icons/coin-icon.png" class="coin-icon"></span>
+                    <button class="buy-button" data-item-key="${key}">Mua</button>
+            </div>`;
         }
 
-        const liHtml = `
+        return `
             <li>
                 <div class="item-info">
                     <strong style="font-size: 16px;">${item.name}</strong>
@@ -203,19 +161,16 @@ export function renderShop(pet) {
                 </div>
                 ${buySectionHtml}
             </li>`;
+    };
 
-        if (item.type === CONSTANTS.TYPE_FOOD) {
-            foodHtml += liHtml;
-        } else if (item.type === CONSTANTS.TYPE_TOOL) {
-            toolHtml += liHtml;
-        } else {
-            decorHtml += liHtml;
-        }
-    }
+    shopFoodList.innerHTML = Object.entries(SHOP_ITEMS.food)
+        .map(([key, item]) => createItemHTML(item, key, 'food')).join('');
 
-    shopFoodList.innerHTML = foodHtml;
-    shopDecorList.innerHTML = decorHtml;
-    shopToolList.innerHTML = toolHtml;
+    shopDecorList.innerHTML = Object.entries(SHOP_ITEMS.decorations)
+        .map(([key, item]) => createItemHTML(item, key, 'decorations')).join('');
+
+    shopToolList.innerHTML = Object.entries(SHOP_ITEMS.tools)
+        .map(([key, item]) => createItemHTML(item, key, 'tools')).join('');
 }
 
 export function renderExploreLocations(pet) {
@@ -237,7 +192,7 @@ export function renderExploreLocations(pet) {
         let buttonClass = 'start-explore-button';
 
         if (isExploringThisLocation) {
-            buttonText = 'Đang';
+            buttonText = '<span>.</span><span>.</span><span>.</span>';
             buttonClass = 'exploring-button';
         } else if (!isUnlocked) {
             buttonText = 'Khóa';
@@ -268,17 +223,17 @@ export function renderInventory(pet) {
     let craftHtml = '';
 
     for (const itemKey in pet.inventory) {
-        const item = SHOP_ITEMS[itemKey];
+        const item = ALL_ITEMS[itemKey];
         if (!item) continue;
 
         const count = pet.inventory[itemKey];
         let liHtml = `<li><div class="item-info"><strong>${item.name}</strong></div>`;
 
-        if (item.type === CONSTANTS.TYPE_ACCESSORY || item.type === CONSTANTS.TYPE_BACKGROUND) {
+        if (item.type === 'accessory' || item.type === 'background') {
             liHtml += `<button class="equip-button" data-item-key="${itemKey}">Dùng</button></li>`;
             if (item.slot === CONSTANTS.HAT_SLOT) hatHtml += liHtml;
             else bgHtml += liHtml;
-        } else if (item.type === CONSTANTS.TYPE_MATERIAL) {
+        } else if (item.type === 'material') {
             materialHtml += `<li><div class="item-info"><p>${item.name}</p><p style="font-size: 10px; font-style: italic;">${item.description}</p></div><span class="item-price">x${count}</span></li>`;
         }
     }
@@ -293,14 +248,13 @@ export function renderInventory(pet) {
             const currentCount = pet.inventory[matKey] || 0;
             const hasEnough = currentCount >= requiredCount;
             if (!hasEnough) canCraft = false;
-            materialsHtml += `<span style="color: ${hasEnough ? 'green' : 'red'};">${SHOP_ITEMS[matKey].name} (${currentCount}/${requiredCount})</span><br>`;
+            materialsHtml += `<span style="color: ${hasEnough ? 'green' : 'red'};">${ALL_ITEMS[matKey].name} (${currentCount}/${requiredCount})</span><br>`;
         }
 
         craftHtml += `
             <li>
                 <div class="item-info">
-                    <strong>${SHOP_ITEMS[recipeKey]?.name || recipe.name}</strong>
-                    <p style="font-size: 10px; font-style: italic;">${materialsHtml}</p>
+                    <strong>${ALL_ITEMS[recipeKey]?.name || recipe.name}</strong> <p style="font-size: 10px; font-style: italic;">${materialsHtml}</p>
                 </div>
                 <button class="craft-button" data-recipe-key="${recipeKey}" ${canCraft ? '' : 'disabled'}>
                     ${pet.inventory[recipeKey] ? 'Có' : 'Ghép'}

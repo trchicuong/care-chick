@@ -98,10 +98,19 @@ export function applyMuteState() {
         masterGainNode.gain.value = isMuted ? 0 : 1;
     }
 
-    if (isMuted) {
-        bgMusicElement.pause();
+    if (audioContext) {
+        if (isMuted) {
+            audioContext.suspend();
+            bgMusicElement.pause();
+        } else {
+            audioContext.resume().then(() => {
+                bgMusicElement.play().catch(e => console.error("Lỗi khi bật lại nhạc:", e));
+            });
+        }
     } else {
-        if (audioContext && audioContext.state === 'running') {
+        if (isMuted) {
+            bgMusicElement.pause();
+        } else {
             bgMusicElement.play().catch(e => { });
         }
     }
