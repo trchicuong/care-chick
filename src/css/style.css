@@ -675,3 +675,7 @@ button {
 #game-wrapper.hidden {
     display: none;
 }
+
+.swal2-confirm {
+    font-family: var(--primary-font);
+}
