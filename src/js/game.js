@@ -638,7 +638,7 @@ function setupEventListeners() {
         Swal.fire({
             title: 'Về Game',
             html: `
-            <div style="text-align: left; font-size: 14px; font-family: monospace; line-height: 1.6;">
+            <div style="text-align: left; font-size: 12px; line-height: 1.6;">
                 <p>Chào mừng bạn đến với <strong>Nuôi Gà Tiên</strong>! Đây là phiên bản Beta, vẫn đang trong quá trình phát triển.</p> <hr>
                 <h3 style="font-size: 16px; color: #75c683; margin-bottom: 5px;">📜 CƠ CHẾ TRÒ CHƠI</h3>
                 <ul>
