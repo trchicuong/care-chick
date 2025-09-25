@@ -789,7 +789,6 @@ export function init() {
     Audio.loadMuteState();
     setupGlobalListeners();
     requestAnimationFrame(gameLoop);
-    UI.preloadImages();
 
     const urlParams = new URLSearchParams(window.location.search);
     const profileData = urlParams.get('profile');
@@ -798,6 +797,7 @@ export function init() {
         try {
             const jsonString = atob(profileData);
             const sharedPet = JSON.parse(jsonString);
+            UI.preloadProfileImages(sharedPet);
             displaySharedProfile(sharedPet);
         } catch (e) {
             UI.startGameButton.addEventListener('click', () => {
@@ -807,6 +807,7 @@ export function init() {
             });
         }
     } else {
+        UI.preloadImages();
         UI.startGameButton.addEventListener('click', () => {
             Audio.playStart(Audio.startAudio);
             Audio.setupBgMusicWithWebAudio();

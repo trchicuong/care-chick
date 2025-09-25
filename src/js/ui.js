@@ -91,6 +91,32 @@ export function preloadImages() {
     });
 }
 
+export function preloadProfileImages(profileData) {
+    const imagesToLoad = [];
+
+    if (profileData.stage) {
+        const stageImage = profileData.stage.startsWith(CONSTANTS.LEVEL_PREFIX)
+            ? `/images/levels/${profileData.stage}.png`
+            : `/images/${profileData.stage}.png`;
+        imagesToLoad.push(stageImage);
+    }
+
+    if (profileData.hat && ALL_ITEMS[profileData.hat]) {
+        imagesToLoad.push(ALL_ITEMS[profileData.hat].image);
+    }
+
+    if (profileData.background && ALL_ITEMS[profileData.background]) {
+        imagesToLoad.push(ALL_ITEMS[profileData.background].image);
+    }
+
+    imagesToLoad.forEach(url => {
+        if (url) {
+            const img = new Image();
+            img.src = url;
+        }
+    });
+}
+
 function updateStatBars(pet) {
     hungerBar.style.width = `${100 - pet.hunger}%`;
     happinessBar.style.width = `${pet.happiness}%`;
