@@ -1,4 +1,3 @@
-/* Định nghĩa CSS Variables */
 :root {
     --primary-font: 'KVN97', monospace;
     --primary-color: #fff;
@@ -7,10 +6,8 @@
     --main-border-color: #222;
     --success-color: #75c683;
     --error-color: #e76f51;
-    --inventory-color: #79a6d9;
-    --inventory-shadow: #4d72a1;
+    --mute-btn-color: #79a6d9;
 
-    /* Font sizes */
     --font-size-small: 14px;
     --font-size-medium: 16px;
     --font-size-large: 20px;
@@ -18,25 +15,20 @@
     --font-size-xxl: 28px;
 }
 
-/* Font Face */
 @font-face {
     font-family: 'KVN97';
     src: url('/fonts/kvn-97.ttf') format('truetype');
-    /* Dự phòng TTF */
     font-weight: normal;
     font-style: normal;
     font-display: swap;
-    /* Tránh blank text khi font đang tải */
 }
 
-/* General styles */
 body {
     font-family: var(--primary-font);
     margin: 0;
     color: var(--primary-color);
     background: url('/images/background.png') center/cover;
     image-rendering: pixelated;
-    /* Giữ cho ảnh pixel rõ nét */
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -46,7 +38,6 @@ body.night {
     background-image: url('/images/background_night.png');
 }
 
-/* Top Bar */
 #top-bar {
     flex-shrink: 0;
     z-index: 100;
@@ -56,10 +47,8 @@ body.night {
     width: 100%;
     padding: 10px 15px;
     box-sizing: border-box;
-    /* Đảm bảo padding không làm tràn layout */
 }
 
-/* Wrapper */
 #wrapper {
     display: flex;
     justify-content: center;
@@ -67,13 +56,11 @@ body.night {
     width: 100%;
     padding-top: 20px;
     padding-bottom: 20px;
-    /* Tạo khoảng trống ở trên cho top-bar */
     box-sizing: border-box;
     flex-grow: 1;
     overflow-y: auto;
 }
 
-/* Game Container */
 #game-container {
     position: relative;
     overflow: hidden;
@@ -91,7 +78,6 @@ body.night #game-container {
     background-image: url('/images/cover_night.png');
 }
 
-/* Pet Background */
 #pet-background {
     position: absolute;
     top: 0;
@@ -103,7 +89,6 @@ body.night #game-container {
     image-rendering: pixelated;
 }
 
-/* Elements with z-index 1 */
 h1,
 #currency-display,
 #pet-display,
@@ -115,14 +100,12 @@ h1,
     z-index: 1;
 }
 
-/* Heading */
 h1 {
     font-size: var(--font-size-xl);
     margin-top: 0;
     text-shadow: 0 0 8px #000000;
 }
 
-/* Info Button */
 #info-button {
     position: relative;
     width: 40px;
@@ -151,7 +134,7 @@ h1 {
     height: 40px;
     border-radius: 50%;
     border: 3px solid var(--primary-color);
-    background-color: var(--inventory-color);
+    background-color: var(--mute-btn-color);
     cursor: pointer;
     padding: 0;
     display: flex;
@@ -185,7 +168,6 @@ h1 {
     margin-left: 5px;
 }
 
-/* Pet Display */
 #pet-display {
     width: 150px;
     height: 150px;
@@ -207,7 +189,6 @@ h1 {
     cursor: pointer;
 }
 
-/* Pet Accessory */
 .pet-accessory {
     position: absolute;
     top: 0;
@@ -216,7 +197,6 @@ h1 {
     pointer-events: none;
 }
 
-/* Pet Stats */
 #pet-stats .stat {
     margin-bottom: 10px;
 }
@@ -227,13 +207,11 @@ h1 {
     margin-bottom: 10px;
 }
 
-/* Main Info */
 #main-info p {
     font-weight: bold;
     text-shadow: 0 0 8px #000000;
 }
 
-/* Stat Bars */
 .stat-bar-container {
     width: 100%;
     background-color: #e0e0e0;
@@ -294,39 +272,34 @@ h1 {
     box-shadow: none !important;
 }
 
-/* Cure Button */
 #cure-button {
     font-size: var(--font-size-xxl);
     color: red;
     display: none;
 }
 
-/* Age Display */
 #age-display {
     font-weight: bold;
 }
 
-/* Status Text */
 #status-text {
     height: 20px;
     font-size: var(--font-size-small);
     color: red;
 }
 
-/* Open Shop Button */
 #open-shop-button {
     font-family: var(--primary-font);
     font-size: var(--font-size-medium);
-    padding: 10px 20px;
+    padding: 10px 10px;
     margin-top: 10px;
     cursor: pointer;
     border-radius: 8px;
     border: 3px solid var(--main-border-color);
-    background-color: #f7d87b;
-    box-shadow: 0 4px 0 #b59839;
+    background-color: #f7b65c;
+    box-shadow: 0 4px 0 #c78835;
 }
 
-/* Shop Modal */
 #shop-modal,
 #inventory-modal,
 #explore-modal {
@@ -369,7 +342,6 @@ h1 {
     margin-top: 0;
 }
 
-/* Shop Tabs */
 .shop-tabs {
     display: flex;
     border-bottom: 2px solid #ccc;
@@ -444,7 +416,6 @@ h1 {
     cursor: pointer;
 }
 
-/* Close Shop Button */
 #close-shop-button,
 #close-inventory-button,
 #close-explore-button {
@@ -460,30 +431,27 @@ h1 {
     background-color: var(--error-color);
 }
 
-/* Bottom Buttons */
 #bottom-buttons {
     display: flex;
     justify-content: center;
-    gap: 10px;
+    gap: 5px;
     position: relative;
     z-index: 1;
+    flex-wrap: wrap;
 }
 
-/* Open Inventory Button */
 #open-inventory-button {
     font-family: var(--primary-font);
     font-size: var(--font-size-medium);
-    padding: 10px 20px;
+    padding: 10px 10px;
     margin-top: 10px;
     cursor: pointer;
     border-radius: 8px;
     border: 3px solid var(--main-border-color);
-    background-color: var(--inventory-color);
-    box-shadow: 0px 4px 0px var(--inventory-shadow);
-    transition: all 0.1s;
+    background-color: #5bb6d1;
+    box-shadow: 0px 4px 0px #3a8a9e;
 }
 
-/* Equip Button */
 .equip-button {
     background-color: #f7d87b !important;
 }
@@ -498,14 +466,13 @@ h1 {
 #explore-button {
     font-family: var(--primary-font);
     font-size: var(--font-size-medium);
-    padding: 10px 20px;
+    padding: 10px 10px;
     margin-top: 10px;
     cursor: pointer;
     border-radius: 8px;
     border: 3px solid var(--main-border-color);
-    flex-grow: 1;
-    background-color: #a2d2ff;
-    box-shadow: 0 4px 0 #5e8ab8;
+    background-color: #b98c6c;
+    box-shadow: 0 4px 0 #8a6345;
 }
 
 .exploring-button {
@@ -546,13 +513,22 @@ h1 {
     }
 }
 
+#share-profile-button {
+    font-family: var(--primary-font);
+    font-size: var(--font-size-medium);
+    padding: 10px 10px;
+    margin-top: 10px;
+    cursor: pointer;
+    border-radius: 8px;
+    border: 3px solid var(--main-border-color);
+    background-color: #83d487;
+    box-shadow: 0 4px 0 #5a945e;
+}
+
 button:disabled {
     pointer-events: none;
-    /* Ngăn mọi sự kiện click và touch */
     opacity: 0.5;
-    /* Làm mờ nút đi */
     filter: grayscale(1);
-    /* Chuyển thành màu xám */
 }
 
 button {

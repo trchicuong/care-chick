@@ -1,4 +1,5 @@
 import { CONSTANTS, SHOP_ITEMS, ALL_ITEMS, EXPLORE_LOCATIONS, CRAFTING_RECIPES } from './data.js';
+import * as Data from './data.js';
 
 export const getEl = (id) => document.getElementById(id);
 
@@ -46,6 +47,7 @@ export const inventoryMaterialList = getEl('inventory-material-list');
 export const craftingRecipeList = getEl('crafting-recipe-list');
 export const shopTabs = document.querySelector('#shop-content .shop-tabs');
 export const inventoryTabs = document.querySelector('#inventory-content .shop-tabs');
+export const shareButton = getEl('share-profile-button');
 
 export function preloadImages() {
     const imageUrls = [
@@ -58,6 +60,31 @@ export function preloadImages() {
         '/images/levels/lv10.png', '/images/levels/lv11.png', '/images/levels/lv12.png',
         '/images/levels/lv13.png', '/images/levels/lv14.png', '/images/levels/lv15.png'
     ];
+
+    for (const key in Data.SHOP_ITEMS.decorations) {
+        const item = Data.SHOP_ITEMS.decorations[key];
+        if (item.type === 'background' && item.image) {
+            imageUrls.push(item.image);
+        }
+    }
+
+    for (const key in Data.SHOP_ITEMS.decorations) {
+        const item = Data.SHOP_ITEMS.decorations[key];
+        if (item.type === 'accessory' && item.slot === 'hat' && item.image) {
+            imageUrls.push(item.image);
+        }
+    }
+
+    for (const key in Data.SHOP_ITEMS.craftables) {
+        const item = Data.SHOP_ITEMS.craftables[key];
+        if (item.type === 'accessory' && item.slot === 'hat' && item.image) {
+            imageUrls.push(item.image);
+        }
+    }
+
+    imageUrls.push('/images/background_night.png');
+    imageUrls.push('/images/cover_night.png');
+
     imageUrls.forEach(url => {
         const img = new Image();
         img.src = url;

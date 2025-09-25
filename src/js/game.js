@@ -187,6 +187,11 @@ function handleAction(actionType) {
 
     let coinsGained = effects.coins || 0;
     if (effects.coinMultiplier) coinsGained *= effects.coinMultiplier;
+
+    if (pet.activeBuffs?.coinBoost && Date.now() < pet.activeBuffs.coinBoost.endTime) {
+        coinsGained *= pet.activeBuffs.coinBoost.multiplier;
+    }
+
     pet.coins += Math.floor(coinsGained);
 
     if (effects.bonusCoinChance && Math.random() < effects.bonusCoinChance) {
@@ -467,73 +472,75 @@ function gameLoop(currentTime) {
 
     if (deltaTime > Data.gameTickInterval) {
         lastUpdateTime = currentTime - (deltaTime % Data.gameTickInterval);
-        pet.lastUpdateTime = Date.now();
+        if (pet) {
+            pet.lastUpdateTime = Date.now();
 
-        if (pet.isExploring && Date.now() >= pet.explorationData.endTime) {
-            finishExploration();
-        }
+            if (pet.isExploring && Date.now() >= pet.explorationData.endTime) {
+                finishExploration();
+            }
 
-        if (pet.activeBuffs) {
-            for (const buffType in pet.activeBuffs) {
-                if (Date.now() > pet.activeBuffs[buffType].endTime) {
-                    delete pet.activeBuffs[buffType];
+            if (pet.activeBuffs) {
+                for (const buffType in pet.activeBuffs) {
+                    if (Date.now() > pet.activeBuffs[buffType].endTime) {
+                        delete pet.activeBuffs[buffType];
+                    }
                 }
             }
+
+            if (pet.isSick) {
+                if (checkGameOver()) return;
+            }
+            else if (pet.isSleeping) {
+                const oldEnergy = pet.energy;
+                const currentLv = getCurrentLevel();
+                const energyPerTick = Math.max(0.2, 1.0 - ((currentLv - 1) * 0.048));
+                pet.energy = Math.min(Data.CONSTANTS.MAX_STAT, pet.energy + energyPerTick);
+
+                if (pet.energy !== oldEnergy) markStateAsDirty();
+
+                if (pet.energy >= Data.CONSTANTS.MAX_STAT) {
+                    pet.isSleeping = false;
+                    Audio.playSfxFromBuffer('wake');
+                }
+            }
+            else if (!pet.isExploring) {
+                pet.energy = Math.max(Data.CONSTANTS.MIN_STAT, pet.energy - 0.5);
+
+                let decayMultiplier = 1;
+                if (pet.activeBuffs?.decayReducer) {
+                    decayMultiplier = pet.activeBuffs.decayReducer.multiplier;
+                }
+
+                const baseDecayRate = 1 + Math.floor(getCurrentLevel() / 4);
+                const finalDecayRate = baseDecayRate * decayMultiplier;
+
+                let hungerIncrease = finalDecayRate;
+                if (pet.satietyBonus > 0) {
+                    hungerIncrease *= 0.5;
+                    pet.satietyBonus--;
+                }
+
+                pet.hunger = Math.min(Data.CONSTANTS.MAX_STAT, pet.hunger + hungerIncrease);
+                pet.happiness = Math.max(Data.CONSTANTS.MIN_STAT, pet.happiness - finalDecayRate);
+                pet.cleanliness = Math.max(Data.CONSTANTS.MIN_STAT, pet.cleanliness - finalDecayRate);
+
+                const isSad = pet.hunger > 80 || pet.happiness < 20 || pet.cleanliness < 20 || pet.energy < 10;
+                if (isSad && pet.stage !== Data.CONSTANTS.STAGE_EGG) {
+                    pet.sadTicks++;
+                } else {
+                    pet.sadTicks = 0;
+                }
+                if (pet.sadTicks >= Data.SAD_TICKS_TO_GET_SICK) {
+                    pet.isSick = true;
+                    pet.sickTimestamp = Date.now();
+                }
+                checkEvolution();
+                markStateAsDirty();
+            }
+
+            sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
+            savePet();
         }
-
-        if (pet.isSick) {
-            if (checkGameOver()) return;
-        }
-        else if (pet.isSleeping) {
-            const oldEnergy = pet.energy;
-            const currentLv = getCurrentLevel();
-            const energyPerTick = Math.max(0.2, 1.0 - ((currentLv - 1) * 0.048));
-            pet.energy = Math.min(Data.CONSTANTS.MAX_STAT, pet.energy + energyPerTick);
-
-            if (pet.energy !== oldEnergy) markStateAsDirty();
-
-            if (pet.energy >= Data.CONSTANTS.MAX_STAT) {
-                pet.isSleeping = false;
-                Audio.playSfxFromBuffer('wake');
-            }
-        }
-        else if (!pet.isExploring) {
-            pet.energy = Math.max(Data.CONSTANTS.MIN_STAT, pet.energy - 0.5);
-
-            let decayMultiplier = 1;
-            if (pet.activeBuffs?.decayReducer) {
-                decayMultiplier = pet.activeBuffs.decayReducer.multiplier;
-            }
-
-            const baseDecayRate = 1 + Math.floor(getCurrentLevel() / 4);
-            const finalDecayRate = baseDecayRate * decayMultiplier;
-
-            let hungerIncrease = finalDecayRate;
-            if (pet.satietyBonus > 0) {
-                hungerIncrease *= 0.5;
-                pet.satietyBonus--;
-            }
-
-            pet.hunger = Math.min(Data.CONSTANTS.MAX_STAT, pet.hunger + hungerIncrease);
-            pet.happiness = Math.max(Data.CONSTANTS.MIN_STAT, pet.happiness - finalDecayRate);
-            pet.cleanliness = Math.max(Data.CONSTANTS.MIN_STAT, pet.cleanliness - finalDecayRate);
-
-            const isSad = pet.hunger > 80 || pet.happiness < 20 || pet.cleanliness < 20 || pet.energy < 10;
-            if (isSad && pet.stage !== Data.CONSTANTS.STAGE_EGG) {
-                pet.sadTicks++;
-            } else {
-                pet.sadTicks = 0;
-            }
-            if (pet.sadTicks >= Data.SAD_TICKS_TO_GET_SICK) {
-                pet.isSick = true;
-                pet.sickTimestamp = Date.now();
-            }
-            checkEvolution();
-            markStateAsDirty();
-        }
-
-        sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
-        savePet();
     }
 }
 
@@ -548,8 +555,13 @@ function startGame() {
         }
     }
 
-    requestAnimationFrame(gameLoop);
-    UI.preloadImages();
+    loadPet();
+    calculateOfflineProgression();
+
+    UI.renderInventory(pet);
+    sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
+
+    setupEventListeners();
     setTimeout(displayPendingNotifications, 1000);
 }
 
@@ -570,8 +582,9 @@ async function displayPendingNotifications() {
     }
 }
 
-function setupEventListeners() {
+function setupGlobalListeners() {
     const addSmartEventListener = (element, callback) => {
+        if (!element) return;
         let touchStarted = false;
         const onPress = (e) => {
             if (e.cancelable) e.preventDefault();
@@ -593,46 +606,7 @@ function setupEventListeners() {
         element.addEventListener('mouseleave', onCancel);
     };
 
-    UI.startGameButton.addEventListener('click', () => {
-        Audio.playStart(Audio.startAudio);
-        Audio.setupBgMusicWithWebAudio();
-        startGame();
-    });
-
     addSmartEventListener(UI.muteButton, Audio.toggleMute);
-    addSmartEventListener(UI.feedButton, () => handleAction('feed_free'));
-    addSmartEventListener(UI.playButton, () => handleAction('play'));
-    addSmartEventListener(UI.cleanButton, () => handleAction('clean'));
-    addSmartEventListener(UI.cureButton, cure);
-    addSmartEventListener(UI.sleepButton, toggleSleep);
-
-    addSmartEventListener(UI.openShopButton, () => {
-        Audio.playSound('click');
-        if (isShopViewDirty) {
-            UI.renderShop(pet);
-            isShopViewDirty = false;
-        }
-        UI.shopModal.classList.remove('hidden');
-    });
-
-    addSmartEventListener(UI.openInventoryButton, () => {
-        Audio.playSound('click');
-        UI.inventoryModal.classList.remove('hidden');
-    });
-
-    addSmartEventListener(UI.exploreButton, () => {
-        Audio.playSound('click');
-        if (isExploreViewDirty) {
-            UI.renderExploreLocations(pet);
-            isExploreViewDirty = false;
-        }
-        UI.exploreModal.classList.remove('hidden');
-    });
-
-    addSmartEventListener(UI.closeShopButton, () => { Audio.playSound('click'); UI.shopModal.classList.add('hidden'); });
-    addSmartEventListener(UI.closeInventoryButton, () => { Audio.playSound('click'); UI.inventoryModal.classList.add('hidden'); });
-    addSmartEventListener(UI.closeExploreButton, () => { Audio.playSound('click'); UI.exploreModal.classList.add('hidden'); });
-
     addSmartEventListener(UI.infoButton, () => {
         Audio.playSound('click');
         Swal.fire({
@@ -669,6 +643,65 @@ function setupEventListeners() {
             confirmButtonText: 'Tôi đã hiểu'
         });
     });
+}
+
+function setupEventListeners() {
+    const addSmartEventListener = (element, callback) => {
+        if (!element) return;
+        let touchStarted = false;
+        const onPress = (e) => {
+            if (e.cancelable) e.preventDefault();
+            element.classList.add('button-active');
+            touchStarted = e.type === 'touchstart';
+        };
+        const onRelease = (e) => {
+            if (e.cancelable) e.preventDefault();
+            element.classList.remove('button-active');
+            if (!touchStarted || e.type === 'touchend') {
+                callback(e);
+            }
+        };
+        const onCancel = () => element.classList.remove('button-active');
+        element.addEventListener('mousedown', onPress);
+        element.addEventListener('touchstart', onPress, { passive: false });
+        element.addEventListener('mouseup', onRelease);
+        element.addEventListener('touchend', onRelease);
+        element.addEventListener('mouseleave', onCancel);
+    };
+
+    addSmartEventListener(UI.feedButton, () => handleAction('feed_free'));
+    addSmartEventListener(UI.playButton, () => handleAction('play'));
+    addSmartEventListener(UI.cleanButton, () => handleAction('clean'));
+    addSmartEventListener(UI.cureButton, cure);
+    addSmartEventListener(UI.sleepButton, toggleSleep);
+    addSmartEventListener(UI.shareButton, sharePetProfile);
+
+    addSmartEventListener(UI.openShopButton, () => {
+        Audio.playSound('click');
+        if (isShopViewDirty) {
+            UI.renderShop(pet);
+            isShopViewDirty = false;
+        }
+        UI.shopModal.classList.remove('hidden');
+    });
+
+    addSmartEventListener(UI.openInventoryButton, () => {
+        Audio.playSound('click');
+        UI.inventoryModal.classList.remove('hidden');
+    });
+
+    addSmartEventListener(UI.exploreButton, () => {
+        Audio.playSound('click');
+        if (isExploreViewDirty) {
+            UI.renderExploreLocations(pet);
+            isExploreViewDirty = false;
+        }
+        UI.exploreModal.classList.remove('hidden');
+    });
+
+    addSmartEventListener(UI.closeShopButton, () => { Audio.playSound('click'); UI.shopModal.classList.add('hidden'); });
+    addSmartEventListener(UI.closeInventoryButton, () => { Audio.playSound('click'); UI.inventoryModal.classList.add('hidden'); });
+    addSmartEventListener(UI.closeExploreButton, () => { Audio.playSound('click'); UI.exploreModal.classList.add('hidden'); });
 
     const setupTabListeners = (tabContainer, modal) => {
         tabContainer.addEventListener('click', (event) => {
@@ -701,11 +734,83 @@ function setupEventListeners() {
     [UI.shopFoodList, UI.shopDecorList, UI.shopToolList, UI.inventoryHatList, UI.inventoryBgList, UI.craftingRecipeList, UI.exploreLocationList].forEach(setupListListeners);
 }
 
+function displaySharedProfile(sharedPet) {
+    UI.splashScreen.classList.add('hidden');
+    UI.gameWrapper.classList.remove('hidden');
+    UI.getEl('actions').style.display = 'none';
+    UI.getEl('bottom-buttons').style.display = 'none';
+
+    const viewPet = {
+        stage: sharedPet.stage || 'egg',
+        age: sharedPet.age || 0,
+        background: sharedPet.background || Data.CONSTANTS.DEFAULT_BG,
+        accessories: { hat: sharedPet.hat || null },
+        hunger: 0,
+        happiness: 100,
+        cleanliness: 100,
+        energy: 100,
+        isSick: false,
+        isSleeping: false,
+        isExploring: false,
+        coins: sharedPet.coins || 0,
+    };
+
+    UI.updateDisplay(viewPet, false, null, () => { });
+    UI.statusText.innerHTML = `Bạn đang xem Gà của người khác. <a href="${window.location.pathname}" style="color: #adff2f; text-decoration: underline;">Trở về</a>`;
+}
+
+function sharePetProfile() {
+    Audio.playSound('click');
+    const petProfile = {
+        stage: pet.stage,
+        age: pet.age,
+        hat: pet.accessories.hat,
+        background: pet.background,
+        coins: pet.coins
+    };
+    const jsonString = JSON.stringify(petProfile);
+    const base64String = btoa(unescape(encodeURIComponent(jsonString)));
+    const shareUrl = `${window.location.origin}${window.location.pathname}?profile=${base64String}`;
+
+    if (navigator.share) {
+        navigator.share({
+            title: 'Gà Tiên của tôi!',
+            text: 'Hãy xem Gà Tiên của tôi đã tiến hóa đến đâu này!',
+            url: shareUrl
+        }).catch(error => console.log('Lỗi khi chia sẻ:', error));
+    } else {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+            Swal.fire('Đã sao chép link!', 'Link profile Gà của bạn đã được sao chép.', 'success');
+        });
+    }
+}
+
 export function init() {
-    loadPet();
-    calculateOfflineProgression();
-    UI.renderInventory(pet);
-    sadAudioSourceNode = UI.updateDisplay(pet, isAnimating, sadAudioSourceNode, Audio.playSfxFromBuffer);
     Audio.loadMuteState();
-    setupEventListeners();
+    setupGlobalListeners();
+    requestAnimationFrame(gameLoop);
+    UI.preloadImages();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const profileData = urlParams.get('profile');
+
+    if (profileData) {
+        try {
+            const jsonString = atob(profileData);
+            const sharedPet = JSON.parse(jsonString);
+            displaySharedProfile(sharedPet);
+        } catch (e) {
+            UI.startGameButton.addEventListener('click', () => {
+                Audio.playStart(Audio.startAudio);
+                Audio.setupBgMusicWithWebAudio();
+                startGame();
+            });
+        }
+    } else {
+        UI.startGameButton.addEventListener('click', () => {
+            Audio.playStart(Audio.startAudio);
+            Audio.setupBgMusicWithWebAudio();
+            startGame();
+        });
+    }
 }
