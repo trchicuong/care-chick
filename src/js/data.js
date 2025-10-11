@@ -60,6 +60,7 @@ export const SHOP_ITEMS = {
         'tinh_chat_hoi_phuc': { name: 'Tinh Chất Hồi Phục', type: 'food', price: 950, description: 'Phục hồi 50% các thanh chỉ số No bụng, Vui vẻ và Sạch sẽ đã mất.', satietyDuration: 10, restorePercent: 0.5 },
         'nuoc_suoi_tinh_lang': { name: 'Nước Suối Tĩnh Lặng', type: 'food', price: 1800, hunger: 0, happiness: 5, description: 'Thanh lọc cơ thể. Giảm 30% tốc độ suy giảm chỉ số trong 2 giờ.', buff: { type: 'decayReducer', multiplier: 0.7, duration: 7200000 } },
         'sieu_pham_ga_tien': { name: 'Siêu Phẩm Gà Tiên', type: 'food', price: 2500, description: 'Tinh hoa ẩm thực, phục hồi 80 điểm cho tất cả chỉ số.', satietyDuration: 1200, multiRestore: { hunger: -80, happiness: 80, cleanliness: 80, energy: 80 } },
+        'tra_tang_toc_thoi_gian': { name: 'Trà Tăng Tốc Thời Gian', type: 'food', price: 2000, hunger: -5, happiness: 10, description: 'Tăng tốc lên cấp: x2 tốc độ lớn lên trong 1 giờ.', buff: { type: 'ageBoost', multiplier: 2.0, duration: 3600000 } },
     },
     tools: {
         'chen_an_vui_ve': { name: 'Chén Ăn Vui Vẻ', type: 'tool', slot: 'feed', price: 600, description: 'Nâng cấp "Cho Ăn": Tăng thêm No bụng và Vui vẻ.', bonuses: { feed_free: { hunger: -5, happiness: 3 } } },

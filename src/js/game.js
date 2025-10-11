@@ -4,6 +4,7 @@ import * as Audio from './audio.js';
 import { isMuted } from './audio.js';
 
 let pet;
+const DATA_VERSION = 1;
 let isAnimating = false;
 let lastUpdateTime = 0;
 let lastInteractionTime = 0;
@@ -18,6 +19,15 @@ function markStateAsDirty() {
 
 function savePet() {
     if (isPetStateDirty) {
+        // Backup previous snapshot to avoid accidental data loss
+        try {
+            const prev = localStorage.getItem('virtualPet');
+            if (prev) {
+                localStorage.setItem('virtualPet.backup', prev);
+                localStorage.setItem('virtualPet.backupAt', String(Date.now()));
+            }
+        } catch (e) { }
+
         localStorage.setItem('virtualPet', JSON.stringify(pet));
         isPetStateDirty = false;
     }
@@ -35,8 +45,9 @@ function updateInventory(itemKey, quantity) {
 }
 
 function getCurrentLevel() {
-    if (pet.stage.startsWith(Data.CONSTANTS.LEVEL_PREFIX)) {
-        return parseInt(pet.stage.replace(Data.CONSTANTS.LEVEL_PREFIX, ''), 10);
+    if (!pet || !pet.stage) return 0;
+    if (typeof pet.stage === 'string' && pet.stage.startsWith(Data.CONSTANTS.LEVEL_PREFIX)) {
+        return parseInt(pet.stage.replace(Data.CONSTANTS.LEVEL_PREFIX, ''), 10) || 0;
     }
     return 0;
 };
@@ -59,7 +70,14 @@ function applyAbandonmentPenalty() {
     pet.isSick = false;
     pet.sickTimestamp = null;
     pet.sadTicks = 0;
+    const nextStage = Data.EVOLUTION_STAGES.find(s => s.from === pet.stage);
+    if (nextStage && typeof nextStage.requiredAge === 'number') {
+        const targetAge = Math.max(0, nextStage.requiredAge - 1);
+        pet.age = Math.min(pet.age || 0, targetAge);
+        pet.ageTicks = 0;
+    }
     markStateAsDirty();
+    savePet();
 }
 
 function calculateOfflineProgression() {
@@ -84,7 +102,7 @@ function calculateOfflineProgression() {
     }
 
     if (pet.isExploring && now >= pet.explorationData.endTime) {
-        finishExploration(true);
+        if (pet.explorationData && pet.explorationData.endTime) finishExploration(true);
     }
 
     const threeDays = 3 * 24 * 60 * 60 * 1000;
@@ -95,6 +113,44 @@ function calculateOfflineProgression() {
     if (ticksMissed > 0) {
         markStateAsDirty();
     }
+}
+
+function migratePet(savedPet, defaultPet) {
+    // Never drop unknown fields; start with default then overlay saved
+    let migrated = { ...defaultPet, ...savedPet };
+
+    // v1: Convert legacy ownedItems -> inventory
+    if (savedPet && savedPet.ownedItems && !savedPet.inventory) {
+        migrated.inventory = { ...migrated.inventory };
+        try {
+            savedPet.ownedItems.forEach(itemKey => {
+                migrated.inventory[itemKey] = (migrated.inventory[itemKey] || 0) + 1;
+            });
+            delete migrated.ownedItems;
+        } catch (_) { /* ignore malformed arrays */ }
+    }
+
+    // Ensure nested structures exist
+    if (!migrated.accessories) migrated.accessories = { hat: null };
+    if (typeof migrated.accessories.hat === 'undefined') migrated.accessories.hat = null;
+    if (!migrated.pendingNotifications) migrated.pendingNotifications = [];
+
+    // Clamp basic stats to safe ranges (non-destructive, just prevents NaN/out-of-range)
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, Number.isFinite(v) ? v : min));
+    migrated.hunger = clamp(migrated.hunger, Data.CONSTANTS.MIN_STAT, Data.CONSTANTS.MAX_STAT);
+    migrated.happiness = clamp(migrated.happiness, Data.CONSTANTS.MIN_STAT, Data.CONSTANTS.MAX_STAT);
+    migrated.cleanliness = clamp(migrated.cleanliness, Data.CONSTANTS.MIN_STAT, Data.CONSTANTS.MAX_STAT);
+    migrated.energy = clamp(migrated.energy, Data.CONSTANTS.MIN_STAT, Data.CONSTANTS.MAX_STAT);
+
+    // Exploration safety: if marked exploring but missing data, reset gracefully
+    if (migrated.isExploring && (!migrated.explorationData || !migrated.explorationData.endTime)) {
+        migrated.isExploring = false;
+        migrated.explorationData = null;
+    }
+
+    // Tag version for future migrations
+    migrated.dataVersion = DATA_VERSION;
+    return migrated;
 }
 
 function loadPet() {
@@ -109,19 +165,22 @@ function loadPet() {
         isExploring: false, explorationData: null,
         lastUpdateTime: null,
         sickTimestamp: null,
-        pendingNotifications: []
+        pendingNotifications: [],
+        dataVersion: DATA_VERSION
     };
     const petData = localStorage.getItem('virtualPet');
     if (petData) {
-        const savedPet = JSON.parse(petData);
-        pet = { ...defaultPet, ...savedPet };
-
-        if (savedPet.ownedItems && !savedPet.inventory) {
-            pet.inventory = {};
-            savedPet.ownedItems.forEach(itemKey => {
-                updateInventory(itemKey, 1);
-            });
-            delete pet.ownedItems;
+        let savedPet = null;
+        try {
+            savedPet = JSON.parse(petData);
+        } catch (e) {
+            console.warn('Failed to parse saved pet data, ignoring corrupted data.', e);
+            try { localStorage.setItem('virtualPet.corruptBackup', petData); } catch (_) { }
+        }
+        if (savedPet) {
+            pet = migratePet(savedPet, defaultPet);
+        } else {
+            pet = defaultPet;
         }
 
     } else {
@@ -149,17 +208,23 @@ function calculateActionEffects(actionType, inventory) {
     };
 
     const effects = { ...baseEffects[actionType] };
-
+    const bestBySlot = {};
     for (const itemKey in inventory) {
         const item = Data.ALL_ITEMS[itemKey];
-        if (item && item.bonuses && item.bonuses[actionType]) {
-            const bonus = item.bonuses[actionType];
-            for (const effectKey in bonus) {
-                if (effectKey.includes('Multiplier')) {
-                    effects[effectKey] = (effects[effectKey] || 1) * bonus[effectKey];
-                } else {
-                    effects[effectKey] = (effects[effectKey] || 0) + bonus[effectKey];
-                }
+        if (!item || !item.bonuses || !item.bonuses[actionType]) continue;
+        const slot = item.slot || '_noslot';
+        const price = item.price || 0;
+        if (!bestBySlot[slot] || price > bestBySlot[slot].price) {
+            bestBySlot[slot] = { bonus: item.bonuses[actionType], price };
+        }
+    }
+    for (const slot in bestBySlot) {
+        const bonus = bestBySlot[slot].bonus;
+        for (const effectKey in bonus) {
+            if (effectKey.includes('Multiplier')) {
+                effects[effectKey] = (effects[effectKey] || 1) * bonus[effectKey];
+            } else {
+                effects[effectKey] = (effects[effectKey] || 0) + bonus[effectKey];
             }
         }
     }
@@ -187,10 +252,10 @@ function handleAction(actionType) {
 
     let coinsGained = effects.coins || 0;
     if (effects.coinMultiplier) coinsGained *= effects.coinMultiplier;
-
     if (pet.activeBuffs?.coinBoost && Date.now() < pet.activeBuffs.coinBoost.endTime) {
         coinsGained *= pet.activeBuffs.coinBoost.multiplier;
     }
+    coinsGained = Math.min(coinsGained, 100);
 
     pet.coins += Math.floor(coinsGained);
 
@@ -199,7 +264,8 @@ function handleAction(actionType) {
         Swal.fire({ title: 'Món Phụ Bất Ngờ!', text: `Bạn nhận thêm ${effects.bonusCoinAmount} Xu!`, icon: 'info', timer: 2000, showConfirmButton: false });
     }
     if (effects.energyPerLevel) {
-        pet.energy = Math.min(Data.CONSTANTS.MAX_STAT, pet.energy + getCurrentLevel() * effects.energyPerLevel);
+        const addEnergy = Math.min(getCurrentLevel() * effects.energyPerLevel, 10);
+        pet.energy = Math.min(Data.CONSTANTS.MAX_STAT, pet.energy + addEnergy);
     }
     if (effects.buffChance && Math.random() < effects.buffChance) {
         if (!pet.activeBuffs) pet.activeBuffs = {};
@@ -411,8 +477,11 @@ function finishExploration(isOffline = false) {
         randomNum -= reward.weight;
     }
 
-    const rewardItem = Data.ALL_ITEMS[rewardKey];
-    updateInventory(rewardKey, 1);
+    let rewardItem = null;
+    if (rewardKey) {
+        rewardItem = Data.ALL_ITEMS[rewardKey];
+        updateInventory(rewardKey, 1);
+    }
 
     pet.isExploring = false;
     pet.explorationData = null;
@@ -421,7 +490,7 @@ function finishExploration(isOffline = false) {
 
     const notification = {
         title: 'Thám hiểm Hoàn tất!',
-        text: `Pet của bạn đã trở về và tìm thấy: ${rewardItem.name}!`,
+        text: `Pet của bạn đã trở về và tìm thấy: ${rewardItem ? rewardItem.name : 'một vật phẩm'}!`,
         icon: 'success'
     };
 
@@ -439,7 +508,12 @@ function checkEvolution() {
     if (pet.isSick || pet.isSleeping || pet.isExploring) return;
 
     const isPerfectlyCaredFor = pet.happiness > 90 && pet.cleanliness > 90 && pet.hunger < 10 && pet.energy > 90;
-    pet.ageTicks += isPerfectlyCaredFor ? 2 : 1;
+    let gain = isPerfectlyCaredFor ? 2 : 1;
+    if (pet.activeBuffs?.ageBoost && Date.now() < pet.activeBuffs.ageBoost.endTime) {
+        const m = pet.activeBuffs.ageBoost.multiplier || 1;
+        gain = Math.max(1, Math.floor(gain * m));
+    }
+    pet.ageTicks += gain;
 
     if (pet.ageTicks >= 60) {
         pet.age++;
@@ -779,9 +853,16 @@ function sharePetProfile() {
             url: shareUrl
         }).catch(error => console.log('Lỗi khi chia sẻ:', error));
     } else {
-        navigator.clipboard.writeText(shareUrl).then(() => {
-            Swal.fire('Đã sao chép link!', 'Link profile Gà của bạn đã được sao chép.', 'success');
-        });
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                Swal.fire('Đã sao chép link!', 'Link profile Gà của bạn đã được sao chép.', 'success');
+            }).catch(err => {
+                console.warn('Clipboard write failed', err);
+                Swal.fire('Lỗi', 'Không thể sao chép link tự động. Vui lòng sao chép thủ công: ' + shareUrl, 'info');
+            });
+        } else {
+            Swal.fire('Link chia sẻ', `Vui lòng sao chép link sau: ${shareUrl}`, 'info');
+        }
     }
 }
 

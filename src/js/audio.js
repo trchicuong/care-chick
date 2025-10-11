@@ -123,5 +123,5 @@ export function toggleMute() {
 
 export function loadMuteState() {
     isMuted = localStorage.getItem('isGameMuted') === 'true';
-    muteIcon.className = isMuted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
+    applyMuteState();
 }

@@ -135,7 +135,7 @@ function updateMainInfo(pet) {
     let levelText = '';
     if (pet.stage === CONSTANTS.STAGE_EGG) levelText = 'Trứng';
     else if (pet.stage === CONSTANTS.STAGE_BABY) levelText = 'Gà Con';
-    else if (pet.stage.startsWith(CONSTANTS.LEVEL_PREFIX)) levelText = pet.stage.replace(CONSTANTS.LEVEL_PREFIX, '');
+    else if (typeof pet.stage === 'string' && pet.stage.startsWith(CONSTANTS.LEVEL_PREFIX)) levelText = pet.stage.replace(CONSTANTS.LEVEL_PREFIX, '');
     levelDisplay.textContent = levelText;
 }
 
@@ -143,9 +143,24 @@ function updatePetVisuals(pet, isAnimating) {
     if (isAnimating) return;
 
     document.body.classList.toggle('night', pet.isSleeping);
-    petBackground.style.backgroundImage = pet.background === CONSTANTS.DEFAULT_BG ? '' : `url('${ALL_ITEMS[pet.background].image}')`;
-    petHat.style.display = pet.accessories.hat ? 'block' : 'none';
-    if (pet.accessories.hat) petHat.src = ALL_ITEMS[pet.accessories.hat].image;
+    try {
+        if (pet.background === CONSTANTS.DEFAULT_BG) {
+            petBackground.style.backgroundImage = '';
+        } else if (ALL_ITEMS[pet.background] && ALL_ITEMS[pet.background].image) {
+            petBackground.style.backgroundImage = `url('${ALL_ITEMS[pet.background].image}')`;
+        } else {
+            petBackground.style.backgroundImage = '';
+        }
+
+        petHat.style.display = pet.accessories && pet.accessories.hat ? 'block' : 'none';
+        if (pet.accessories && pet.accessories.hat && ALL_ITEMS[pet.accessories.hat]) {
+            petHat.src = ALL_ITEMS[pet.accessories.hat].image;
+        }
+    } catch (e) {
+        console.warn('UI.updatePetVisuals: failed to render background/hat', e);
+        petBackground.style.backgroundImage = '';
+        petHat.style.display = 'none';
+    }
 
     let newImageSrc = '';
     if (pet.isExploring) newImageSrc = '/images/exploring.png';
@@ -173,7 +188,7 @@ function updateUIState(pet) {
 
     statusText.textContent = '';
     if (pet.isExploring) {
-        const timeLeft = Math.max(0, pet.explorationData.endTime - Date.now());
+        const timeLeft = Math.max(0, (pet.explorationData && pet.explorationData.endTime ? pet.explorationData.endTime : Date.now()) - Date.now());
         const minutes = Math.floor(timeLeft / 60000);
         const seconds = Math.floor((timeLeft % 60000) / 1000);
         statusText.textContent = `Thám hiểm... ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
@@ -193,7 +208,11 @@ export function updateDisplay(pet, isAnimating, sadAudioSourceNode, playSfxFromB
     const isSad = !isAnimating && !pet.isExploring && !pet.isSick && !pet.isSleeping && pet.stage !== CONSTANTS.STAGE_EGG && (pet.hunger > 80 || pet.happiness < 20 || pet.cleanliness < 20 || pet.energy < 10);
     if (isSad && !sadAudioSourceNode) return playSfxFromBuffer('sad', true);
     if (!isSad && sadAudioSourceNode) {
-        sadAudioSourceNode.stop(0);
+        try {
+            if (typeof sadAudioSourceNode.stop === 'function') sadAudioSourceNode.stop(0);
+        } catch (e) {
+            console.warn('Failed to stop sad audio source node', e);
+        }
         return null;
     }
     return sadAudioSourceNode;
@@ -237,8 +256,8 @@ export function renderShop(pet) {
 export function renderExploreLocations(pet) {
     let locationsHtml = '';
     const getCurrentLevel = (p) => {
-        if (p.stage.startsWith(CONSTANTS.LEVEL_PREFIX)) {
-            return parseInt(p.stage.replace(CONSTANTS.LEVEL_PREFIX, ''), 10);
+        if (p && typeof p.stage === 'string' && p.stage.startsWith(CONSTANTS.LEVEL_PREFIX)) {
+            return parseInt(p.stage.replace(CONSTANTS.LEVEL_PREFIX, ''), 10) || 0;
         }
         return 0;
     };
@@ -247,7 +266,7 @@ export function renderExploreLocations(pet) {
     for (const key in EXPLORE_LOCATIONS) {
         const loc = EXPLORE_LOCATIONS[key];
         const isUnlocked = currentLv >= loc.levelReq && pet.age >= loc.ageReq;
-        const isExploringThisLocation = pet.isExploring && pet.explorationData.locationKey === key;
+        const isExploringThisLocation = pet.isExploring && pet.explorationData && pet.explorationData.locationKey === key;
 
         let buttonText = 'Đi';
         let buttonClass = 'start-explore-button';
